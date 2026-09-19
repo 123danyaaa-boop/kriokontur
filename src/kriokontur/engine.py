@@ -47,6 +47,8 @@ class MonthRow:
     closing_t: float
     capacity_t: float
     target_t: float
+    overflow_t: float = 0.0     # перелив сверх ёмкости: топливо уходит из баланса явной статьёй
+    avg_stock_t: float = 0.0    # средний запас месяца с учётом времени, база платы за хранение
 
 
 @dataclass
@@ -55,11 +57,17 @@ class YearRow:
     demand_total_t: float
     demand_critical_t: float
     reserved_t: Dict[str, float] = field(default_factory=dict)
+    contracted_t: Dict[str, float] = field(default_factory=dict)   # резерв × доля года доступности
     ordered_t: Dict[str, float] = field(default_factory=dict)
     delivered_t: Dict[str, float] = field(default_factory=dict)
     payable_t: Dict[str, float] = field(default_factory=dict)
+    unused_paid_t: Dict[str, float] = field(default_factory=dict)  # оплачено по take-or-pay, но не отобрано
+    variable_payment_mln: Dict[str, float] = field(default_factory=dict)
+    reservation_payment_mln: Dict[str, float] = field(default_factory=dict)
+    price_mln_per_t: Dict[str, float] = field(default_factory=dict)
     gross_t: float = 0.0
     losses_t: float = 0.0
+    overflow_t: float = 0.0
     served_t: float = 0.0
     served_critical_t: float = 0.0
     shortage_t: float = 0.0
@@ -70,6 +78,7 @@ class YearRow:
     max_stock_t: float = 0.0
     capacity_t: float = 0.0
     reserve_required_t: float = 0.0
+    opening_stock_cost_mln: float = 0.0
     cost: Dict[str, float] = field(default_factory=lambda: {
         "procurement": 0.0, "reservation": 0.0, "holding": 0.0, "fixed_opex": 0.0, "capex": 0.0})
     total_cost_mln: float = 0.0
@@ -150,25 +159,31 @@ def availability(case: CaseInput, plan: Plan, scenario=None) -> Dict[str, Option
 
 
 def months_available(avail_month: Optional[int], year_index: int) -> int:
-    """Сколько месяцев года канал доступен: база для period_fraction."""
-    if avail_month is None:
-        return 0
-    start, end = year_index * MONTHS, year_index * MONTHS + MONTHS
-    return int(max(0, min(end, 10 ** 6) - max(start, avail_month)))
+    """Сколько месяцев года канал доступен: формула живёт в rules.months_available,
+    здесь только привязка к шагу расчёта движка."""
+    return rules.months_available(avail_month, year_index, MONTHS)
 
 
-def storage_mode(case: CaseInput, plan: Plan, year: int) -> StorageOption:
-    """Активный режим хранилища: последняя введённая модернизация на этот год.
+def storage_mode(case: CaseInput, plan: Plan, year: int, month_index: Optional[int] = None,
+                 lag_months: float = 0.0) -> StorageOption:
+    """Активный режим хранилища на месяц (или на начало года, если месяц не задан).
+
+    Момент ввода модернизации раскрыт явно: решение принимается в году decision_year,
+    новый режим работает с месяца decision_year-01 плюс storage_commissioning_lag_months
+    (TEAM_ASSUMPTION, по умолчанию 0 — ввод с 1 января года решения).
 
     Правило общее, поэтому вторая очередь хранилища работает без правок кода:
     достаточно строки в storage_options.csv и решения в плане.
     """
-    best, best_year = case.storage["BASE"], -10 ** 6
+    first_year = case.years[0]
+    now = month_index if month_index is not None else (year - first_year) * MONTHS
+    best, best_start = case.storage["BASE"], -10 ** 9
     for key, decision_year in plan.investments.items():
         if decision_year is None or key not in case.storage or key == "BASE":
             continue
-        if decision_year <= year and decision_year > best_year:
-            best, best_year = case.storage[key], decision_year
+        start = (decision_year - first_year) * MONTHS + lag_months
+        if start <= now and start > best_start:
+            best, best_start = case.storage[key], start
     return best
 
 
@@ -197,12 +212,22 @@ def capex_schedule(case: CaseInput, plan: Plan) -> Dict[int, float]:
     return out
 
 
-def fixed_opex(case: CaseInput, plan: Plan, year: int) -> float:
-    """Постоянный OPEX года: активный режим хранилища плюс введённые инвестиции."""
+def fixed_opex(case: CaseInput, plan: Plan, year: int,
+               availability: Optional[Dict[str, Optional[int]]] = None,
+               year_index: Optional[int] = None, storage_lag_months: float = 0.0) -> float:
+    """Постоянный OPEX года с учётом периода работы объекта (PDF с. 7).
+
+    Хранилище: OPEX начисляется за месяцы, когда модернизированный режим уже работает.
+    Инвестиция в канал: OPEX начисляется за месяцы, когда канал фактически доступен
+    (для Lunar-ISRU это год ввода 2038 плюс лаг пусконаладки, а не весь год финансирования).
+    """
+    first_year = case.years[0]
+    i = year_index if year_index is not None else case.years.index(year)
     total = 0.0
-    store = storage_mode(case, plan, year)
-    if store.storage_id != "BASE":
-        total += store.fixed_opex_mln_per_year
+    for month in range(MONTHS):
+        store = storage_mode(case, plan, year, i * MONTHS + month, storage_lag_months)
+        if store.storage_id != "BASE":
+            total += store.fixed_opex_mln_per_year / MONTHS
     for key, decision_year in plan.investments.items():
         if decision_year is None or key in case.storage:
             continue
@@ -211,9 +236,12 @@ def fixed_opex(case: CaseInput, plan: Plan, year: int) -> float:
         if inv is None or inv.fixed_opex_mln_per_year == 0:
             continue
         source_id = INVESTMENT_SOURCE.get(base)
-        start = case.sources[source_id].available_from_year if source_id in case.sources else decision_year
-        if start is not None and year >= max(start, decision_year):
-            total += inv.fixed_opex_mln_per_year
+        if availability is not None and source_id in availability:
+            fraction = months_available(availability.get(source_id), i) / MONTHS
+        else:
+            start = case.sources[source_id].available_from_year if source_id in case.sources else decision_year
+            fraction = 1.0 if (start is not None and year >= max(start, decision_year)) else 0.0
+        total += inv.fixed_opex_mln_per_year * fraction
     return total
 
 # --------------------------------------------------------------------------- #
@@ -227,6 +255,7 @@ def run(case: CaseInput, scenario: Scenario, plan: Plan) -> RunResult:
     lead_steps = int(plan.assume("emergency_lead_steps"))
     ramp_months = float(plan.assume("reserve_ramp_months"))
     safety = float(plan.assume("reserve_safety_factor"))
+    store_lag = float(plan.assume("storage_commissioning_lag_months") or 0.0)
 
     years = [YearRow(year=y,
                      demand_total_t=scenario.demand_total(case, y),
@@ -242,13 +271,14 @@ def run(case: CaseInput, scenario: Scenario, plan: Plan) -> RunResult:
 
     stock = float(plan.inventory_policy.get("opening_stock_t", 0.0))
     emergency_pipeline: Dict[int, float] = {}
+    emergency_booked: Dict[int, float] = {}    # заказано у Emergency по году прибытия: договор годовой
     total_months = len(case.years) * MONTHS
 
     for m in range(total_months):
         i, month = divmod(m, MONTHS)
         year = case.years[i]
         yr = years[i]
-        store = storage_mode(case, plan, year)
+        store = storage_mode(case, plan, year, m, store_lag)
         if month == 0:
             yr.opening_t = stock
             yr.capacity_t = store.capacity_t
@@ -266,18 +296,28 @@ def run(case: CaseInput, scenario: Scenario, plan: Plan) -> RunResult:
         net = 1.0 - store.loss_rate_on_throughput
 
         def room_left() -> float:
-            taken = sum(ordered.values()) * net
+            # свободный объём с учётом уже заказанного в этом месяце и партии аварийного
+            # канала, которая находится в пути и придёт именно в этот месяц: отменить её нельзя
+            incoming_e = emergency_pipeline.get(m, 0.0) * scenario.delivery_factor(
+                case.sources["E"].name, "E", year)
+            taken = sum(ordered.values()) * net + incoming_e * net
             return max(0.0, store.capacity_t - stock - taken)
 
         def take(sid: str, want_net: float) -> float:
-            """Заказать столько, чтобы после потерь добавить want_net тонн."""
+            """Заказать столько, чтобы после потерь добавить want_net тонн.
+
+            Отбор ограничен законтрактованным объёмом канала: резерв × доля года
+            доступности (CALCULATION_RULES §13). Явный заказ команды сверх резерва
+            не исполняется, а выводится нарушением ORDER_EXCEEDS_RESERVATION.
+            """
             if want_net <= 1e-9 or avail.get(sid) is None or m < avail[sid]:
                 return 0.0
             cap_factor = scenario.capacity_factor(case.sources[sid].name, sid, year)
-            cap_month = plan.reserved(sid, year) / MONTHS * cap_factor
+            on = max(1, months_available(avail.get(sid), i))
+            contracted_year = plan.reserved(sid, year) * on / MONTHS
             explicit = plan.ordered(sid, year)
-            if explicit is not None:
-                cap_month = explicit / max(1, months_available(avail.get(sid), i))
+            allowed_year = min(explicit, contracted_year) if explicit is not None else contracted_year
+            cap_month = allowed_year / on * cap_factor
             gross_want = min(want_net / net, max(0.0, cap_month - ordered[sid]), room_left() / net)
             if gross_want <= 1e-9:
                 return 0.0
@@ -316,8 +356,15 @@ def run(case: CaseInput, scenario: Scenario, plan: Plan) -> RunResult:
             if projected < -1e-6:
                 arrive = m + lead_steps
                 if arrive < total_months:
-                    want = min(-projected, reserved_e / MONTHS * lead_steps)
+                    # годовой договор аварийного канала: отбор года прибытия не может превышать
+                    # зарезервированный объём и физическую мощность канала (CALCULATION_RULES §13–14)
+                    ia = arrive // MONTHS
+                    allowance = min(plan.reserved("E", case.years[ia]), case.sources["E"].capacity_t_per_year)
+                    remaining = max(0.0, allowance - emergency_booked.get(ia, 0.0))
+                    batch = reserved_e / MONTHS * lead_steps          # размер партии одного вызова
+                    want = min(-projected, batch, remaining)
                     if want > 1e-6:
+                        emergency_booked[ia] = emergency_booked.get(ia, 0.0) + want
                         emergency_pipeline[arrive] = emergency_pipeline.get(arrive, 0.0) + want
                         log.append({"month": m, "year": year, "kind": "emergency",
                                     "title": "Вызов аварийного канала",
@@ -334,14 +381,19 @@ def run(case: CaseInput, scenario: Scenario, plan: Plan) -> RunResult:
         losses = rules.losses_on_throughput(gross, store.loss_rate_on_throughput)
         stock = rules.closing_inventory(stock, gross, losses, 0.0)
 
+        # перелив сверх ёмкости: топливо не исчезает молча, а уходит отдельной статьёй баланса
+        overflow = 0.0
         if stock > store.capacity_t + 1e-6:
+            overflow = stock - store.capacity_t
             structural.append(Violation(
                 code="STORAGE_OVERFLOW", severity="hard", scenario_id=scenario.scenario_id, period=year,
                 metric="physical_inventory", value=round(stock, 2), limit=store.capacity_t,
-                excess=round(stock - store.capacity_t, 2),
+                excess=round(overflow, 2),
                 message=f"STORAGE_OVERFLOW year={year} month={month + 1} inventory={stock:.1f} "
-                        f"capacity={store.capacity_t:.0f} excess={stock - store.capacity_t:.1f}"))
+                        f"capacity={store.capacity_t:.0f} excess={overflow:.1f} "
+                        f"причина: поступление превышает свободный объём, излишек списан"))
             stock = store.capacity_t
+        post_inflow = stock
 
         served_crit = min(crit_m, stock)
         stock -= served_crit
@@ -351,17 +403,23 @@ def run(case: CaseInput, scenario: Scenario, plan: Plan) -> RunResult:
         short = rules.shortage(demand_m, served)
         short_crit = rules.shortage(crit_m, served_crit)
 
+        # средний запас месяца с учётом времени: поступление приходит в начале месяца,
+        # выдача идёт равномерно, поэтому берём середину отрезка (раскрыто в MATH_MODEL)
+        avg_month = (post_inflow + stock) / 2.0
+
         for sid in ordered:
             yr.ordered_t[sid] += ordered[sid]
             yr.delivered_t[sid] += delivered[sid]
         yr.gross_t += gross
         yr.losses_t += losses
+        yr.overflow_t += overflow
         yr.served_t += served
         yr.served_critical_t += served_crit
         yr.shortage_t += short
         yr.shortage_critical_t += short_crit
-        yr.avg_stock_t += stock / MONTHS
-        yr.max_stock_t = max(yr.max_stock_t, stock)
+        yr.avg_stock_t += avg_month / MONTHS
+        yr.cost["holding"] += avg_month * store.holding_cost_mln_per_t_year / MONTHS
+        yr.max_stock_t = max(yr.max_stock_t, post_inflow)
         if month == MONTHS - 1:
             yr.closing_t = stock
         if short > 0.01:
@@ -373,7 +431,8 @@ def run(case: CaseInput, scenario: Scenario, plan: Plan) -> RunResult:
         months.append(MonthRow(index=m, year=year, month=month + 1, opening_t=yr.opening_t if month == 0 else months[-1].closing_t,
                                ordered_t=dict(ordered), delivered_t=dict(delivered), gross_t=gross, losses_t=losses,
                                served_t=served, served_critical_t=served_crit, shortage_t=short, closing_t=stock,
-                               capacity_t=store.capacity_t, target_t=target))
+                               capacity_t=store.capacity_t, target_t=target, overflow_t=overflow,
+                               avg_stock_t=avg_month))
 
     # ----------------------------------------------------------------------- #
     # 3. деньги
@@ -390,22 +449,31 @@ def run(case: CaseInput, scenario: Scenario, plan: Plan) -> RunResult:
     opening_source = case.sources[str(plan.assume("opening_stock_source"))]
 
     for i, yr in enumerate(years):
-        store = storage_mode(case, plan, yr.year)
         for s in case.source_list:
-            fraction = months_available(avail.get(s.source_id), i) / MONTHS
-            reserved_period = plan.reserved(s.source_id, yr.year) * fraction
-            price = s.variable_cost_mln_per_t * scenario.price_factor(s.name, s.source_id, yr.year)
-            yr.payable_t[s.source_id] = rules.payable_volume(yr.ordered_t[s.source_id], s.take_or_pay_share, reserved_period)
-            yr.cost["procurement"] += rules.variable_payment(price, yr.ordered_t[s.source_id],
-                                                             s.take_or_pay_share, reserved_period)
-            yr.cost["reservation"] += rules.reservation_payment(s.reservation_rate,
-                                                                plan.reserved(s.source_id, yr.year), fraction)
-        yr.cost["holding"] = yr.avg_stock_t * store.holding_cost_mln_per_t_year
-        yr.cost["fixed_opex"] = fixed_opex(case, plan, yr.year)
+            sid = s.source_id
+            fraction = months_available(avail.get(sid), i) / MONTHS
+            reserved_period = plan.reserved(sid, yr.year) * fraction
+            price = s.variable_cost_mln_per_t * scenario.price_factor(s.name, sid, yr.year)
+            payable = rules.payable_volume(yr.ordered_t[sid], s.take_or_pay_share, reserved_period)
+            var_pay = rules.variable_payment(price, yr.ordered_t[sid], s.take_or_pay_share, reserved_period)
+            res_pay = rules.reservation_payment(s.reservation_rate, plan.reserved(sid, yr.year), fraction)
+            yr.contracted_t[sid] = reserved_period
+            yr.payable_t[sid] = payable
+            yr.unused_paid_t[sid] = max(0.0, payable - yr.ordered_t[sid])
+            yr.price_mln_per_t[sid] = price
+            yr.variable_payment_mln[sid] = var_pay
+            yr.reservation_payment_mln[sid] = res_pay
+            yr.cost["procurement"] += var_pay
+            yr.cost["reservation"] += res_pay
+        # плата за хранение накоплена помесячно в основном цикле: так режим хранилища
+        # может смениться в середине года и средний запас считается с учётом времени
+        yr.cost["fixed_opex"] = fixed_opex(case, plan, yr.year, avail, i, store_lag)
         yr.cost["capex"] = capex.get(yr.year, 0.0)
         if i == 0:
             # начальный запас не бесплатен: закупка подготовительного периода, отнесена на первый год
-            yr.cost["procurement"] += float(plan.inventory_policy.get("opening_stock_t", 0.0)) * opening_source.variable_cost_mln_per_t
+            yr.opening_stock_cost_mln = (float(plan.inventory_policy.get("opening_stock_t", 0.0))
+                                         * opening_source.variable_cost_mln_per_t)
+            yr.cost["procurement"] += yr.opening_stock_cost_mln
         yr.total_cost_mln = sum(yr.cost.values())
         yr.discounted_cost_mln = rules.discount(yr.total_cost_mln, yr.year, base_year, rate)
 
@@ -423,7 +491,9 @@ def run(case: CaseInput, scenario: Scenario, plan: Plan) -> RunResult:
         "served_critical_t": sum(y.served_critical_t for y in years),
         "shortage_t": sum(y.shortage_t for y in years),
         "losses_t": sum(y.losses_t for y in years),
+        "overflow_t": sum(y.overflow_t for y in years),
         "gross_t": sum(y.gross_t for y in years),
+        "unused_paid_t": sum(sum(y.unused_paid_t.values()) for y in years),
     }
     totals["sl_total"] = rules.service_level(totals["served_t"], totals["demand_t"])
     totals["sl_critical"] = rules.service_level(totals["served_critical_t"], totals["demand_critical_t"])

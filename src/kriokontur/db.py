@@ -120,12 +120,13 @@ def save_run(conn: sqlite3.Connection, res: RunResult, case: CaseInput) -> str:
                       y.cost["procurement"], y.cost["reservation"], y.cost["holding"], y.cost["fixed_opex"],
                       y.cost["capex"], y.total_cost_mln, y.discounted_cost_mln))
         for s in case.source_list:
+            # платежи берём из прогона, а не пересчитываем: доля года и цена сценария уже учтены там
             conn.execute("INSERT INTO run_source_year VALUES (?,?,?,?,?,?,?,?,?)",
                          (run_id, y.year, s.source_id, y.reserved_t.get(s.source_id, 0.0),
                           y.ordered_t.get(s.source_id, 0.0), y.delivered_t.get(s.source_id, 0.0),
                           y.payable_t.get(s.source_id, 0.0),
-                          s.variable_cost_mln_per_t * y.payable_t.get(s.source_id, 0.0),
-                          s.reservation_rate * y.reserved_t.get(s.source_id, 0.0)))
+                          y.variable_payment_mln.get(s.source_id, 0.0),
+                          y.reservation_payment_mln.get(s.source_id, 0.0)))
     for m in res.months:
         conn.execute("INSERT INTO run_month VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                      (run_id, m.index, m.year, m.month, m.opening_t, m.gross_t, m.losses_t, m.served_t,

@@ -54,11 +54,24 @@ def test_v07_reserve_45_days():
 
 
 def test_v08_capacity_exceeded():
+    """V08 организатора: синтетический канал capacity = 10 т/год, reserved = 12 т/год, excess = 2 т.
+
+    Раньше тест брал реальный канал B (110 против 120) и добавлял к ожиданию +8, чтобы сойтись
+    с эталоном. Теперь воспроизводится именно контрольный пример: данные кейса не трогаем,
+    а синтетический источник создаём копией записи с мощностью 10 т/год.
+    """
+    from dataclasses import replace
+
     case = load_case()
+    case.sources = dict(case.sources)
+    case.sources["V08"] = replace(case.sources["B"], source_id="V08", name="V08-synthetic",
+                                  capacity_t_per_year=10.0)
     plan = Plan(plan_id="v08")
-    plan.reservations["B"] = {2035: case.sources["B"].capacity_t_per_year + 10}
+    plan.reservations["V08"] = {2035: 12.0}
     viol = [v for v in validate_plan(case, plan) if v.code == EXPECTED["V08"]["violation"]]
-    assert viol and viol[0].excess == pytest.approx(EXPECTED["V08"]["excess_t"] + 8)  # 120 при 110 = 10 т
+    assert viol, "нарушение CAPACITY_EXCEEDED не сформировано"
+    assert viol[0].excess == pytest.approx(EXPECTED["V08"]["excess_t"])
+    assert viol[0].period == 2035 and viol[0].limit == 10.0
 
 
 def test_v09_critical_demand_is_nested():

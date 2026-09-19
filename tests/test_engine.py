@@ -23,8 +23,10 @@ def test_material_balance_holds_every_month(setup):
     res = run(case, scen["BASE"], plan)
     stock = plan.inventory_policy["opening_stock_t"]
     for m in res.months:
-        expected = rules.closing_inventory(stock, m.gross_t, m.losses_t, m.served_t)
-        assert m.closing_t == pytest.approx(min(expected, m.capacity_t), abs=1e-6)
+        # перелив входит в баланс отдельной статьёй, а не срезается молча (D-04)
+        expected = rules.closing_inventory(stock, m.gross_t, m.losses_t, m.served_t) - m.overflow_t
+        assert m.closing_t == pytest.approx(expected, abs=1e-6)
+        assert m.closing_t <= m.capacity_t + 1e-6
         stock = m.closing_t
 
 
@@ -80,7 +82,9 @@ def test_reservation_payment_is_prorated_for_partial_year(setup):
     year = res.years[year_index]
     fraction = (12 - avail["C"] % 12) / 12
     expected = case.sources["C"].reservation_rate * plan.reserved("C", year.year) * fraction
-    assert year.cost["reservation"] >= expected - 1e-6
+    # платёж по каналу публикуется движком, поэтому проверяем точное равенство, а не «не меньше»
+    assert year.reservation_payment_mln["C"] == pytest.approx(expected, abs=1e-9)
+    assert year.cost["reservation"] == pytest.approx(sum(year.reservation_payment_mln.values()), abs=1e-9)
 
 
 def test_discounting_uses_disclosed_rate(setup):

@@ -24,6 +24,9 @@ DEFAULT_ASSUMPTIONS = {
     "reserve_ramp_months": 9,
     "reserve_safety_factor": 1.15,
     "emergency_base_share_threshold": 0.10,
+    # TEAM_ASSUMPTION: модернизация хранилища работает с 1 января года решения.
+    # Кейс не задаёт срок её пусконаладки, поэтому момент ввода вынесен в явный параметр.
+    "storage_commissioning_lag_months": 0,
 }
 
 

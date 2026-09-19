@@ -6,6 +6,17 @@
 from __future__ import annotations
 
 DAYS_IN_YEAR = 365  # CASE_INPUT: организатор считает учебный год равным 365 дням
+MONTHS_IN_YEAR = 12
+
+
+def months_available(avail_month, year_index: int, months_in_year: int = MONTHS_IN_YEAR) -> int:
+    """Сколько месяцев года канал доступен: база для period_fraction в плате за резерв,
+    в проверке договорного объёма и в пропорции постоянного OPEX. Единая формула для
+    движка, проверок и выгрузки, чтобы доля года считалась в одном месте."""
+    if avail_month is None:
+        return 0
+    start, end = year_index * months_in_year, (year_index + 1) * months_in_year
+    return int(max(0, end - max(start, avail_month)))
 
 
 def closing_inventory(opening_t: float, delivered_t: float, losses_t: float, served_t: float) -> float:

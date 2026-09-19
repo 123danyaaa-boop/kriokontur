@@ -36,7 +36,7 @@ from pydantic import BaseModel
 
 from . import ENGINE_VERSION, db, export, paths
 from .caseinput import load_case
-from .checks import validate_plan
+from .checks import validate_envelope, validate_plan
 from .engine import run as run_engine
 from .plan import Plan
 from .planner import auto_plan
@@ -80,6 +80,22 @@ def _scenario(scenario_id: str):
     if scenario_id not in SCENARIOS:
         raise HTTPException(404, f"сценарий {scenario_id} не найден")
     return SCENARIOS[scenario_id]
+
+
+def _plan(raw: dict) -> Plan:
+    """Единая точка приёма плана: сначала проверка конверта, потом разбор.
+
+    Пользователь получает 422 с полем, годом и причиной, а не 500 на приведении типов
+    и не молча посчитанный «пустой» план.
+    """
+    errors = [v.as_dict() for v in validate_envelope(CASE, raw)]
+    if errors:
+        raise HTTPException(422, {"message": "план не принят: проверьте значения", "violations": errors})
+    plan = Plan.from_envelope(raw)
+    errors = [v.as_dict() for v in validate_plan(CASE, plan) if v.code == "INPUT_INVALID"]
+    if errors:
+        raise HTTPException(422, {"message": "план не принят: проверьте значения", "violations": errors})
+    return plan
 
 
 def _result_json(res) -> dict:
@@ -129,27 +145,21 @@ def post_autoplan(body: AutoPlanBody):
 
 @app.post("/api/run")
 def post_run(body: PlanBody):
-    plan = Plan.from_envelope(body.plan)
-    errors = [v.as_dict() for v in validate_plan(CASE, plan) if v.code == "INPUT_INVALID"]
-    if errors:
-        raise HTTPException(422, {"message": "план не принят: проверьте значения", "violations": errors})
+    plan = _plan(body.plan)
     return _result_json(run_engine(CASE, _scenario(body.scenario_id), plan))
 
 
 @app.post("/api/compare")
 def post_compare(body: CompareBody):
-    plan = Plan.from_envelope(body.plan)
-    # та же проверка входа, что и в /api/run: на битых числах считать нечего,
-    # интерфейс должен получить код нарушения и год, а не набор бессмысленных чисел
-    errors = [v.as_dict() for v in validate_plan(CASE, plan) if v.code == "INPUT_INVALID"]
-    if errors:
-        raise HTTPException(422, {"message": "план не принят: проверьте значения", "violations": errors})
+    plan = _plan(body.plan)
+    for sid in body.scenario_ids:
+        _scenario(sid)          # неизвестный сценарий: 404 до расчёта, а не частичный ответ
     return {sid: _result_json(run_engine(CASE, _scenario(sid), plan)) for sid in body.scenario_ids}
 
 
 @app.post("/api/plans")
 def post_plan(body: PlanBody):
-    plan = Plan.from_envelope(body.plan)
+    plan = _plan(body.plan)
     conn = db.connect()
     db.sync_case(conn, CASE)
     db.sync_scenarios(conn, SCENARIOS, SCEN_DIR)
@@ -185,7 +195,7 @@ def get_plan(plan_id: str):
 
 @app.post("/api/export/csv", response_class=PlainTextResponse)
 def post_export(body: PlanBody):
-    plan = Plan.from_envelope(body.plan)
+    plan = _plan(body.plan)
     scenario = _scenario(body.scenario_id)
     res = run_engine(CASE, scenario, plan)
     return export.to_csv(CASE, res, scenario)
@@ -200,7 +210,7 @@ def _safe_name(text: str) -> str:
 @app.post("/api/export/xlsx")
 def post_export_xlsx(body: PlanBody):
     """Тот же расчёт, что и в CSV, но книгой XLSX. Файл кладётся в results/ и отдаётся браузеру."""
-    plan = Plan.from_envelope(body.plan)
+    plan = _plan(body.plan)
     scenario = _scenario(body.scenario_id)
     res = run_engine(CASE, scenario, plan)
     paths.ensure_dirs()
@@ -265,35 +275,35 @@ def get_params():
 @app.post("/api/sensitivity/sweep")
 def post_sweep(body: SweepBody):
     from .sensitivity import sweep
-    plan = Plan.from_envelope(body.plan)
+    plan = _plan(body.plan)
     return sweep(CASE, _scenario(body.scenario_id), plan, body.key, body.values, body.steps)
 
 
 @app.post("/api/sensitivity/threshold")
 def post_threshold(body: SweepBody):
     from .sensitivity import threshold
-    plan = Plan.from_envelope(body.plan)
+    plan = _plan(body.plan)
     return threshold(CASE, _scenario(body.scenario_id), plan, body.key)
 
 
 @app.post("/api/sensitivity/tornado")
 def post_tornado(body: TornadoBody):
     from .sensitivity import tornado
-    plan = Plan.from_envelope(body.plan)
+    plan = _plan(body.plan)
     return tornado(CASE, _scenario(body.scenario_id), plan, body.keys, body.delta)
 
 
 @app.post("/api/sensitivity/reverse")
 def post_reverse(body: TornadoBody):
     from .sensitivity import reverse_stress
-    plan = Plan.from_envelope(body.plan)
+    plan = _plan(body.plan)
     return reverse_stress(CASE, _scenario(body.scenario_id), plan, body.keys)
 
 
 @app.post("/api/risks")
 def post_risks(body: RiskBody):
     from .risks import evaluate_risks, load_risks
-    plan = Plan.from_envelope(body.plan)
+    plan = _plan(body.plan)
     return evaluate_risks(CASE, SCENARIOS, plan, load_risks(), body.baseline)
 
 
@@ -301,7 +311,7 @@ def post_risks(body: RiskBody):
 def post_geo(body: GeoBody):
     """Геополитический модуль: пользователь задаёт событие, модель возвращает прогон и правило сочетания."""
     from .risks import geo_event
-    plan = Plan.from_envelope(body.plan)
+    plan = _plan(body.plan)
     sc = geo_event(CASE, _scenario(body.base_scenario), body.label, body.sources,
                    body.start_year, body.end_year, body.multiplier, body.component)
     res = run_engine(CASE, sc, plan)
@@ -315,7 +325,7 @@ def post_geo(body: GeoBody):
 def post_monte_carlo(body: MonteCarloBody):
     from dataclasses import asdict as _asdict
     from .risks import monte_carlo
-    plan = Plan.from_envelope(body.plan)
+    plan = _plan(body.plan)
     mc = monte_carlo(CASE, _scenario(body.scenario_id), plan, body.trials, body.seed,
                      body.partial_low, body.partial_high)
     return _asdict(mc)

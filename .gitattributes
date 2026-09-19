@@ -1,0 +1,11 @@
+# Контрольные данные организатора хранятся побайтно как в test_oil: без подстановки CRLF.
+# Иначе отпечаток набора (case_version) и сверка с первоисточником зависят от платформы.
+data/*.csv -text
+tests/expected_checks.json -text
+
+# Остальной текст нормализуется к LF в репозитории.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.glb binary
+*.xlsx binary
+*.sqlite3 binary

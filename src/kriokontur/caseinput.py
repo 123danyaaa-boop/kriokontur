@@ -179,8 +179,14 @@ def load_case(data_dir: Path | str = DATA_DIR) -> CaseInput:
 
 
 def case_version(data_dir: Path | str = DATA_DIR) -> str:
-    """sha256 по контрольным файлам: попадает в каждый прогон и выгрузку."""
+    """sha256 по контрольным файлам: попадает в каждый прогон и выгрузку.
+
+    Перед хэшированием переводы строк нормализуются к LF, а BOM отбрасывается:
+    иначе одна и та же копия набора даёт разный отпечаток на Windows и Linux,
+    и воспроизводимость нельзя подтвердить между машинами.
+    """
     digest = hashlib.sha256()
     for name in sorted(p.name for p in Path(data_dir).glob("*.csv")):
-        digest.update((Path(data_dir) / name).read_bytes())
+        raw = (Path(data_dir) / name).read_bytes()
+        digest.update(raw.lstrip(b"\xef\xbb\xbf").replace(b"\r\n", b"\n").replace(b"\r", b"\n"))
     return digest.hexdigest()[:16]
