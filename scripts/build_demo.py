@@ -1,17 +1,18 @@
 """Сборка автономного демо: снимок расчёта для фронта без бэкенда.
 
     PYTHONPATH=src python scripts/build_demo.py
-Делает два файла:
-    web/snapshot.js                    подхватывается фронтом, если бэкенд не запущен
-    ../outputs/kriokontur-demo.html    один файл со встроенным снимком, можно просто открыть
+Делает два файла, оба в рабочей папке проекта:
+    web/snapshot.js           подхватывается фронтом, если бэкенд не запущен
+    kriokontur-demo.html      один файл со встроенным снимком, можно просто открыть
 """
 import json
 import sys
 from dataclasses import asdict
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from kriokontur.paths import HOME as ROOT  # noqa: E402  корень проекта, см. src/kriokontur/paths.py
 
 from kriokontur.caseinput import load_case
 from kriokontur.engine import run
@@ -94,8 +95,7 @@ def main() -> None:
     html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
     standalone = html.replace('<script src="/web/snapshot.js" onerror="window.__noSnapshot=true"></script>',
                               "<script>\n" + blob + "\n</script>")
-    out = Path("/mnt/user-data/outputs/kriokontur-demo.html")
-    out.parent.mkdir(parents=True, exist_ok=True)
+    out = ROOT / "kriokontur-demo.html"
     out.write_text(standalone, encoding="utf-8")
     print(f"web/snapshot.js: {len(blob) / 1024:.0f} КБ")
     print(f"{out}: {len(standalone) / 1024:.0f} КБ")

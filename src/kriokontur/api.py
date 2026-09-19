@@ -20,15 +20,16 @@
     GET  /api/plans                 список сохранённых планов
     GET  /api/plans/{plan_id}       открыть сохранённый план
     POST /api/export/csv            выгрузка CSV тем же расчётом
+    POST /api/export/xlsx           выгрузка XLSX тем же расчётом
 """
 from __future__ import annotations
 
 from dataclasses import asdict
 from typing import Dict, List, Optional
 
-from pathlib import Path as _Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -42,6 +43,19 @@ from .planner import auto_plan
 from .scenarios import SCEN_DIR, load_all
 
 app = FastAPI(title="Криоконтур", version=ENGINE_VERSION)
+
+# Интерфейс можно открыть и файлом (kriokontur-demo.html): тогда origin у страницы «null»,
+# и без этих заголовков браузер не даст ей достучаться до локального API. Список намеренно
+# узкий: только локальные адреса и файл, чтобы к узлу не ходил произвольный сайт.
+_LOCAL_ORIGINS = ["null"] + [f"http://{host}:{port}" for host in ("127.0.0.1", "localhost")
+                             for port in range(8000, 8011)]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_LOCAL_ORIGINS,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type"],
+)
+
 CASE = load_case()
 SCENARIOS = load_all()
 
@@ -125,6 +139,11 @@ def post_run(body: PlanBody):
 @app.post("/api/compare")
 def post_compare(body: CompareBody):
     plan = Plan.from_envelope(body.plan)
+    # та же проверка входа, что и в /api/run: на битых числах считать нечего,
+    # интерфейс должен получить код нарушения и год, а не набор бессмысленных чисел
+    errors = [v.as_dict() for v in validate_plan(CASE, plan) if v.code == "INPUT_INVALID"]
+    if errors:
+        raise HTTPException(422, {"message": "план не принят: проверьте значения", "violations": errors})
     return {sid: _result_json(run_engine(CASE, _scenario(sid), plan)) for sid in body.scenario_ids}
 
 
@@ -170,6 +189,27 @@ def post_export(body: PlanBody):
     scenario = _scenario(body.scenario_id)
     res = run_engine(CASE, scenario, plan)
     return export.to_csv(CASE, res, scenario)
+
+
+def _safe_name(text: str) -> str:
+    """Имя файла из plan_id: идентификатор приходит от пользователя, в путь его пускать нельзя."""
+    keep = [c if (c.isalnum() or c in "-_") else "-" for c in str(text)]
+    return ("".join(keep).strip("-") or "plan")[:60]
+
+
+@app.post("/api/export/xlsx")
+def post_export_xlsx(body: PlanBody):
+    """Тот же расчёт, что и в CSV, но книгой XLSX. Файл кладётся в results/ и отдаётся браузеру."""
+    plan = Plan.from_envelope(body.plan)
+    scenario = _scenario(body.scenario_id)
+    res = run_engine(CASE, scenario, plan)
+    paths.ensure_dirs()
+    name = f"{_safe_name(plan.plan_id)}_{_safe_name(scenario.scenario_id)}.xlsx"
+    path = export.write_xlsx(CASE, res, scenario, paths.RESULTS / name)
+    return FileResponse(
+        path, filename=name,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 # --------------------------------------------------------------------------- #
