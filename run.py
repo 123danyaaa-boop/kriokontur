@@ -5,23 +5,40 @@
     1. проверяет версию Python;
     2. доустанавливает недостающие библиотеки из requirements.txt;
     3. прогоняет тесты, чтобы расчёт точно не сломан;
-    4. поднимает сервер и печатает адрес, который надо открыть в браузере.
+    4. считает контрольный план в двух сценариях;
+    5. поднимает сервер, сам выбирает свободный порт и открывает браузер.
 
 Полезные ключи:
     python run.py --skip-tests     не запускать тесты
-    python run.py --port 8080      другой порт, если 8000 занят
+    python run.py --port 8080      начать подбор порта с другого номера
+    python run.py --no-browser     не открывать браузер
     python run.py --check          только проверить окружение и посчитать план, без сервера
 """
 from __future__ import annotations
 
 import argparse
+import socket
 import subprocess
 import sys
+import threading
+import time
+import webbrowser
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 SRC = ROOT / "src"
 NEEDED = ["yaml", "openpyxl", "fastapi", "uvicorn", "pytest"]
+HOST = "127.0.0.1"
+PORT_RANGE = range(8000, 8011)   # 8000-8010, как договорились в документации
+
+
+def _setup_console() -> None:
+    """Консоль Windows по умолчанию не в UTF-8, и русские сообщения превращаются в кашу."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
 
 
 def step(text: str) -> None:
@@ -65,10 +82,12 @@ def quick_check() -> None:
     sys.path.insert(0, str(SRC))
     from kriokontur.caseinput import load_case
     from kriokontur.engine import run
+    from kriokontur.paths import DEFAULT_PLAN, ensure_dirs
     from kriokontur.plan import Plan
     from kriokontur.scenarios import load_all
+    ensure_dirs()
     case, scen = load_case(), load_all()
-    plan = Plan.load(ROOT / "configs" / "plans" / "final-candidate.json")
+    plan = Plan.load(DEFAULT_PLAN)
     for sid in ("BASE", "MANDATORY_STRESS"):
         res = run(case, scen[sid], plan)
         hard = sum(1 for v in res.violations if v.severity == "hard")
@@ -76,21 +95,73 @@ def quick_check() -> None:
               f"обслуживание {res.totals['sl_total'] * 100:.2f}%, жёстких нарушений {hard}")
 
 
-def serve(port: int) -> None:
+# --------------------------------------------------------------------------- #
+# порт и браузер
+# --------------------------------------------------------------------------- #
+def port_free(port: int) -> bool:
+    """Порт свободен, если на него удаётся встать самим."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind((HOST, port))
+        except OSError:
+            return False
+    return True
+
+
+def pick_port(preferred: int) -> int:
+    """Берём запрошенный порт, а если занят — следующий свободный из 8000-8010."""
+    candidates = [preferred] + [p for p in PORT_RANGE if p != preferred]
+    for port in candidates:
+        if port_free(port):
+            if port != preferred:
+                print(f"  порт {preferred} занят, беру свободный {port}")
+            return port
+    sys.exit(f"все порты {PORT_RANGE.start}-{PORT_RANGE.stop - 1} заняты: "
+             f"освободите один или укажите свой ключом --port")
+
+
+def open_browser_when_ready(url: str, port: int, timeout: float = 20.0) -> None:
+    """Ждём, пока сервер начнёт принимать соединения, и только тогда открываем браузер."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(0.3)
+            if sock.connect_ex((HOST, port)) == 0:
+                webbrowser.open(url)
+                return
+        time.sleep(0.2)
+    print(f"  браузер не открыл сам: откройте {url} вручную")
+
+
+def serve(port: int, open_browser: bool) -> None:
     step("поднимаю сервер")
     sys.path.insert(0, str(SRC))
     import uvicorn
-    print(f"\n  Откройте в браузере:  http://127.0.0.1:{port}")
-    print("  Документация API:     http://127.0.0.1:{}/docs".format(port))
-    print("  Остановить сервер:    Ctrl+C\n")
-    uvicorn.run("kriokontur.api:app", host="127.0.0.1", port=port, log_level="warning")
+    url = f"http://{HOST}:{port}"
+    print("")
+    print("  ┌───────────────────────────────────────────────┐")
+    print(f"  │  Интерфейс оператора:  {url:<22} │")
+    print(f"  │  Документация API:     {url + '/docs':<22} │")
+    print("  │  Остановить сервер:    Ctrl+C                 │")
+    print("  └───────────────────────────────────────────────┘")
+    print("")
+    if open_browser:
+        threading.Thread(target=open_browser_when_ready, args=(url, port), daemon=True).start()
+    try:
+        uvicorn.run("kriokontur.api:app", host=HOST, port=port, log_level="warning")
+    except KeyboardInterrupt:
+        pass
+    print("\nсервер остановлен")
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--port", type=int, default=8000)
-    ap.add_argument("--skip-tests", action="store_true")
-    ap.add_argument("--check", action="store_true")
+    _setup_console()
+    ap = argparse.ArgumentParser(description="Криоконтур: запуск расчётного ядра и интерфейса")
+    ap.add_argument("--port", type=int, default=8000, help="с какого порта начинать подбор")
+    ap.add_argument("--skip-tests", action="store_true", help="не прогонять тесты перед запуском")
+    ap.add_argument("--check", action="store_true", help="только проверка, без сервера")
+    ap.add_argument("--no-browser", action="store_true", help="не открывать браузер")
     args = ap.parse_args()
     ensure_python()
     ensure_packages()
@@ -100,7 +171,7 @@ def main() -> None:
     if args.check:
         print("\nпроверка окончена, сервер не запускался")
         return
-    serve(args.port)
+    serve(pick_port(args.port), open_browser=not args.no_browser)
 
 
 if __name__ == "__main__":
