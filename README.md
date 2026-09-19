@@ -6,15 +6,24 @@
 
 ## Быстрый старт
 
+### Docker (рекомендовано)
+
+```bash
+docker compose up -d
+```
+
+Приложение запуститься и будет доступно на http://localhost:8000.
+
+### Скрипт / Python
+
 ```bash
 python run.py                 # проверит окружение, прогонит тесты, поднимет сервер и откроет браузер
 ```
 
-Без терминала: двойной клик по `start.command` (macOS) или `start.bat` (Windows).
+Без терминала: двойной клик по  `start.bat` (Windows), `start.command` (macOS) или `start.sh` (Linux).
 
 Скрипт сам подбирает свободный порт из диапазона 8000–8010 и открывает интерфейс в браузере,
-когда сервер готов. Думать про PYTHONPATH, uvicorn и порты не нужно. Ключи: `--check`,
-`--skip-tests`, `--port`, `--no-browser`.
+когда сервер готов. Ключи: `--check`, `--skip-tests`, `--port`, `--no-browser`.
 
 Проект работает из любой рабочей директории: `python ~/kriokontur/run.py --check` посчитает
 то же самое. Корень ищется по маркеру или берётся из переменной `KRIOKONTUR_HOME`,
@@ -35,19 +44,21 @@ PYTHONPATH=src uvicorn kriokontur.api:app --reload --port 8000
 ## Где что лежит
 
 ```
-run.py        единственная точка входа
-start.command двойной клик для macOS
-start.bat     двойной клик для Windows
-web/          интерфейс оператора: index.html плюс snapshot.js для автономного демо
-data/         CASE_INPUT организатора (копия test_oil/data) + PROVENANCE.md
-configs/      сценарии (BASE, MANDATORY_STRESS, LOW/HIGH_DEMAND) и планы команды
-src/kriokontur/  расчётное ядро: paths, rules, caseinput, scenarios, plan, engine, checks,
-              planner, export, db, api, cli
-db/           schema.sql и файл SQLite
-tests/        контрольные примеры V01-V10 и инварианты движка
-results/      выгрузки CSV и XLSX
-docs/         QUICKSTART.md, MATH_MODEL.md, SCENARIOS.md, HORIZON.md, ARCHITECTURE.md, DB_SCHEMA.md, WORKLOG.md
-scripts/      сравнение стратегий, все сценарии, чувствительность, риски, расширяемость
+run.py              точка входа
+docker-compose.yaml
+Dockerfile
+start.bat           cкрипт запуска для Windows
+start.command       cкрипт запуска для macOS
+start.sh            cкрипт запуска для Linux
+web/                интерфейс оператора: index.html плюс snapshot.js для автономного демо
+data/               CASE_INPUT организатора (копия test_oil/data) + PROVENANCE.md
+configs/            сценарии (BASE, MANDATORY_STRESS, LOW/HIGH_DEMAND) и планы команды
+src/kriokontur/     расчётное ядро: paths, rules, caseinput, scenarios, plan, engine, checks, planner, export, db, api, cli
+db/                 schema.sql и файл SQLite
+tests/              контрольные примеры V01-V10 и инварианты движка
+results/            выгрузки CSV и XLSX
+docs/               QUICKSTART.md, MATH_MODEL.md, SCENARIOS.md, HORIZON.md, ARCHITECTURE.md, DB_SCHEMA.md, WORKLOG.md
+scripts/            сравнение стратегий, все сценарии, чувствительность, риски, расширяемость
 ```
 
 ## Порядок проверки для эксперта
@@ -81,9 +92,3 @@ scripts/      сравнение стратегий, все сценарии, ч
 Как только бэкенд появится, страница переключится в живой режим сама, без перезагрузки.
 Любой ответ 4xx или 5xx показывается видимой плашкой с текстом из поля `message`,
 а для 422 ещё и кодом нарушения с годом.
-
-## Границы прототипа
-
-Автоматического оптимизатора нет и он не требуется. Надёжность каналов не используется как
-множитель поставки. Выручка и стоимость срыва миссии не добавляются: в исходных данных их нет.
-Обязательный стресс не комбинируется с высоким спросом автоматически.

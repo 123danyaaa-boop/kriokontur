@@ -28,7 +28,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 SRC = ROOT / "src"
 NEEDED = ["yaml", "openpyxl", "fastapi", "uvicorn", "pytest"]
-HOST = "127.0.0.1"
+HOST = "0.0.0.0"
 PORT_RANGE = range(8000, 8011)   # 8000-8010, как договорились в документации
 
 

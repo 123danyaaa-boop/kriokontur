@@ -1,0 +1,9 @@
+.venv
+
+.idea
+.git
+.gitignore
+
+start.bat
+start.command
+start.sh
