@@ -139,12 +139,17 @@ def serve(port: int, open_browser: bool) -> None:
     sys.path.insert(0, str(SRC))
     import uvicorn
     url = f"http://{HOST}:{port}"
+    rows = [("Интерфейс оператора:", url),
+            ("Документация API:", url + "/docs"),
+            ("Остановить сервер:", "Ctrl+C")]
+    label_w = max(len(label) for label, _ in rows)
+    value_w = max(len(value) for _, value in rows)
+    inner = 2 + label_w + 2 + value_w + 2
     print("")
-    print("  ┌───────────────────────────────────────────────┐")
-    print(f"  │  Интерфейс оператора:  {url:<22} │")
-    print(f"  │  Документация API:     {url + '/docs':<22} │")
-    print("  │  Остановить сервер:    Ctrl+C                 │")
-    print("  └───────────────────────────────────────────────┘")
+    print("  ┌" + "─" * inner + "┐")
+    for label, value in rows:
+        print(f"  │  {label:<{label_w}}  {value:<{value_w}}  │")
+    print("  └" + "─" * inner + "┘")
     print("")
     if open_browser:
         threading.Thread(target=open_browser_when_ready, args=(url, port), daemon=True).start()
