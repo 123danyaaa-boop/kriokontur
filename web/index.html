@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&family=Jura:wght@500;600;700&display=swap" rel="stylesheet">
+<script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
 <style>
 :root{
   --void:#070a11; --panel:rgba(14,20,32,.72); --panel-2:rgba(10,15,25,.9);
@@ -117,7 +118,60 @@ select:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
 .mini{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--ink-2);margin-top:9px}
 .mini input[type=number]{width:78px}
 .mini select{max-width:150px}
-@media (max-width:1200px){main{grid-template-columns:1fr}.banners{position:static}}
+
+/* кастомные выпадающие списки: нативный <select> в тёмной теме рисует список
+   светлым в части браузеров, поэтому сценарий и план — кнопка + свой listbox */
+.ddown{position:relative}
+.ddown-btn{display:flex;align-items:center;gap:7px;border:1px solid var(--line-2);background:none;border-radius:999px;
+  padding:5px 26px 5px 12px;font-size:12px;color:var(--ink-2);cursor:pointer;position:relative}
+.ddown-btn:hover{color:var(--ink)}
+.ddown-label{color:var(--ink-3)}
+.ddown-name{font-weight:500;color:var(--ink);max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ddown-btn .chev{position:absolute;right:9px;top:50%;transform:translateY(-50%)}
+.ddown-btn:disabled{opacity:.42;cursor:not-allowed}
+.ddown-list{position:absolute;left:0;top:calc(100% + 6px);min-width:280px;max-width:min(360px,88vw);
+  background:var(--panel-2);backdrop-filter:blur(16px);border:1px solid var(--line-2);border-radius:12px;
+  padding:6px;z-index:30;max-height:60vh;overflow:auto}
+.ddown-list button{display:block;width:100%;text-align:left;border:0;background:none;padding:8px 10px;
+  border-radius:8px;cursor:pointer;font-size:12.5px;color:var(--ink)}
+.ddown-list button:hover{background:rgba(255,255,255,.07)}
+.ddown-list button.on{background:var(--foil-soft);color:var(--foil-ink)}
+.ddown-list button b{display:block;font-weight:500}
+.ddown-list button .sub{display:block;color:var(--ink-3);font-size:11px;margin-top:2px;font-weight:400}
+.icon-btn{padding:7px 10px;display:inline-flex;align-items:center}
+body.hide-panels main{grid-template-columns:minmax(0,1fr)}
+body.hide-panels #decisions,body.hide-panels #totals{display:none}
+#hidePanelsBtn.on{border-color:rgba(224,168,78,.7);color:var(--foil-ink);background:var(--foil-soft)}
+
+/* подписи с параметрами инвестиций из case-данных, как в мвп */
+.inv-sub{font-size:11px;color:var(--ink-3);margin:5px 0 0;line-height:1.4}
+
+/* вкладка «Узел»: 3-D модель */
+model-viewer{width:100%;height:min(60vh,520px);min-height:280px;border-radius:12px;background:rgba(255,255,255,.03);
+  border:1px solid var(--line)}
+@media (max-width:640px){model-viewer{height:60vw;min-height:220px}}
+
+/* таймлайн: транспортная панель и график по месяцам */
+.transport{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px}
+.play-btn{width:38px;height:38px;border-radius:50%;border:1px solid rgba(224,168,78,.55);background:rgba(224,168,78,.12);
+  display:grid;place-items:center;cursor:pointer;color:var(--foil-ink);flex:0 0 auto;padding:0}
+.play-btn:hover{background:rgba(224,168,78,.2)}
+.play-btn:disabled{opacity:.42;cursor:not-allowed}
+.tl-date{font:600 15px var(--font-display);min-width:118px}
+.tl-chart{width:100%;height:170px;display:block;margin-top:10px;cursor:pointer}
+.tl-caption{display:none;gap:4px;flex-direction:column;margin-top:10px;padding:10px 13px;border-radius:11px;
+  border:1px solid var(--line-2);background:var(--panel-2);font-size:12.5px;line-height:1.45}
+.tl-caption.show{display:flex}
+.tl-caption.alarm{border-color:rgba(255,91,77,.55);background:rgba(255,91,77,.12)}
+.tl-caption b{font:600 12.5px var(--font-display)}
+@media (max-width:1200px){main{grid-template-columns:minmax(0,1fr)}.banners{position:static}}
+@media (max-width:560px){
+  header{padding:12px 14px;gap:10px}
+  .ddown-name{max-width:110px}
+  main{padding:12px 14px 30px}
+  .card{padding:13px}
+  .transport{gap:9px}
+}
 </style>
 </head>
 <body>
@@ -125,10 +179,26 @@ select:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
   <div class="brand">Криоконтур<small>рабочее место оператора топливного узла, 2035–2040</small></div>
   <div class="grow"></div>
   <span class="chip" id="mode"><i class="dot"></i><span id="modeText">подключаюсь…</span></span>
-  <label class="chip">сценарий <select id="scenario"></select></label>
-  <label class="chip">план <select id="planSel"></select></label>
+  <div class="ddown" id="scenarioDd">
+    <button type="button" class="ddown-btn" id="scenarioBtn" aria-haspopup="listbox" aria-expanded="false">
+      <span class="ddown-label">сценарий</span><span class="ddown-name" id="scenarioName">—</span>
+      <svg class="chev" width="11" height="11" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    </button>
+    <div class="ddown-list" id="scenarioList" role="listbox" hidden></div>
+  </div>
+  <div class="ddown" id="planDd">
+    <button type="button" class="ddown-btn" id="planBtn" aria-haspopup="listbox" aria-expanded="false">
+      <span class="ddown-label">план</span><span class="ddown-name" id="planName">—</span>
+      <svg class="chev" width="11" height="11" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    </button>
+    <div class="ddown-list" id="planList" role="listbox" hidden></div>
+  </div>
+  <div class="seg" id="langSeg" style="margin:0"><button data-v="ru" class="on">RU</button><button data-v="en">EN</button></div>
   <button class="btn" id="csvBtn">Выгрузить CSV</button>
   <button class="btn" id="xlsxBtn">Выгрузить XLSX</button>
+  <button class="btn icon-btn" id="hidePanelsBtn" type="button" aria-pressed="false" title="Скрыть боковые панели">
+    <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 2.5v11M10.5 2.5v11" stroke="currentColor" stroke-width="1.3"/></svg>
+  </button>
 </header>
 
 <div class="banners">
@@ -151,14 +221,17 @@ select:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
       <button data-v="physical">Физический запас</button>
       <button data-v="contract">Аварийный контракт</button>
     </div>
+    <p class="hint" id="reserveHint"></p>
     <div class="row"><span>Ставка дисконтирования</span><b id="rateOut">8,0 %</b></div>
     <input type="range" id="rate" min="0" max="15" step="0.5" value="8">
+    <p class="hint">Наше допущение, не данные кейса. Приведение на конец года, база — 2035.</p>
     <p class="hint" id="capexHint"></p>
   </section>
 
   <section>
     <div class="tabs" id="tabs">
       <button data-tab="plan" class="on">План</button>
+      <button data-tab="node">Узел</button>
       <button data-tab="balance">Баланс по годам</button>
       <button data-tab="checks">Проверки<span class="badge" id="vioBadge" hidden>0</span></button>
       <button data-tab="sens">Чувствительность</button>
@@ -167,8 +240,8 @@ select:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
     </div>
 
     <div class="card" id="tab-plan">
-      <h2>План снабжения</h2>
-      <p class="hint">Зарезервированная мощность по каналам, т/год. Серым под строкой фактическая поставка в выбранном сценарии.</p>
+      <h2 data-i18n="h.plan">План снабжения</h2>
+      <p class="hint" data-i18n="h.planHint">Зарезервированная мощность по каналам, т/год. Серым под строкой фактическая поставка в выбранном сценарии.</p>
       <div style="overflow:auto;margin-top:12px"><table id="planTable"></table></div>
       <p class="hint" id="planNote"></p>
       <div class="toolbar">
@@ -183,12 +256,39 @@ select:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
       </div>
     </div>
 
+    <div class="card" id="tab-node" hidden>
+      <h2>Узел</h2>
+      <p class="hint">3-D модель топливного узла. Вращение — зажать и потянуть, приближение — колесо
+        мыши или щипок на сенсорном экране.</p>
+      <model-viewer id="nodeModel" src="/web/assets/Orbital_Fuel_Depot.glb" camera-controls auto-rotate
+        auto-rotate-delay="1200" interaction-prompt="none" exposure="1" shadow-intensity="1"
+        alt="3-D модель орбитального топливного узла">
+        <span slot="poster" class="loading">Загрузка 3-D модели…</span>
+        <span slot="error" class="loading">Модель не загрузилась: проверьте файл web/assets/Orbital_Fuel_Depot.glb.</span>
+      </model-viewer>
+    </div>
+
     <div class="card" id="tab-balance" hidden>
-      <h2>Баланс по годам</h2>
+      <h2 data-i18n="h.balance">Баланс по годам</h2>
       <p class="hint" id="balanceNote"></p>
       <div style="overflow:auto;margin-top:12px"><table id="yearTable"></table></div>
       <svg class="chart" id="stockChart" viewBox="0 0 720 210" preserveAspectRatio="none" role="img" aria-label="Запас и спрос по годам"></svg>
       <p class="note">Синяя линия: запас на конец года. Пунктир: требуемый резерв 45 суток. Столбцы: спрос года.</p>
+
+      <h3 style="margin-top:18px">Таймлайн по месяцам</h3>
+      <p class="hint">Помесячная трасса запаса того же прогона. Точки на графике — события из журнала
+        расчёта (инвестиции, дефициты, вызовы аварийного канала, нарушения ограничений).</p>
+      <svg class="tl-chart" id="tlChart" viewBox="0 0 720 170" preserveAspectRatio="none" role="img" aria-label="Запас топлива по месяцам"></svg>
+      <div class="transport">
+        <button type="button" class="play-btn" id="tlPlay" aria-label="Пуск" title="Пуск/пауза">
+          <svg id="tlPlayIcon" width="14" height="14" viewBox="0 0 14 14"><path d="M3 1.5v11l9-5.5-9-5.5Z" fill="currentColor"/></svg>
+        </button>
+        <span class="tl-date" id="tlDate">Январь 2035</span>
+        <button type="button" class="btn" id="tlSpeed">×1</button>
+        <span class="sp"></span>
+        <span class="status" id="tlStatus"></span>
+      </div>
+      <div class="tl-caption" id="tlCaption"><b id="tlCapTitle"></b><span id="tlCapText"></span></div>
     </div>
 
     <div class="card" id="tab-checks" hidden>
@@ -249,19 +349,19 @@ select:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
   </section>
 
   <section class="card" id="totals">
-    <h2>Итог 2035–2040</h2>
-    <p class="hint">Один план в двух контрольных сценариях.</p>
+    <h2 data-i18n="h.totals">Итог 2035–2040</h2>
+    <p class="hint" data-i18n="h.totalsHint">Один план в двух контрольных сценариях.</p>
     <div class="kpi">
-      <div><span>BASE, приведённые</span><b id="kpiBase">—</b></div>
-      <div><span>Стресс, приведённые</span><b id="kpiStress">—</b></div>
-      <div><span>Обслуживание BASE</span><b id="kpiSlBase">—</b></div>
-      <div><span>Обслуживание стресс</span><b id="kpiSlStress">—</b></div>
+      <div><span data-i18n="kpi.base">BASE, приведённые</span><b id="kpiBase">—</b></div>
+      <div><span data-i18n="kpi.stress">Стресс, приведённые</span><b id="kpiStress">—</b></div>
+      <div><span data-i18n="kpi.slBase">Обслуживание BASE</span><b id="kpiSlBase">—</b></div>
+      <div><span data-i18n="kpi.slStress">Обслуживание стресс</span><b id="kpiSlStress">—</b></div>
     </div>
     <table id="totalsTable" style="margin-top:14px"></table>
-    <h3>Структура расходов</h3>
+    <h3 data-i18n="h.costStructure">Структура расходов</h3>
     <div class="bars" id="costBars"></div>
     <div class="legend" id="costLegend"></div>
-    <p class="note">Деньги в млн условных единиц в постоянных ценах 2035 года. Выручки и стоимости срыва миссии в кейсе нет, поэтому сравниваются расходы.</p>
+    <p class="note" data-i18n="h.totalsNote">Деньги в млн условных единиц в постоянных ценах 2035 года. Выручки и стоимости срыва миссии в кейсе нет, поэтому сравниваются расходы.</p>
   </section>
 </main>
 
@@ -281,12 +381,64 @@ select:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
   var COLOR = { A: 'var(--sA)', B: 'var(--sB)', C: 'var(--sC)', D: 'var(--sD)', E: 'var(--sE)', X: 'var(--sX)' };
   var SNAP = window.SNAPSHOT || null;
 
+  /* ---------------- словарь для языка таблиц плана (RU/EN) ----------------
+     Переводим только служебные подписи экрана — таблицы «План», «Баланс по годам» и «Итог»,
+     это те же разделы, что в export.py (yearly_balance, source_schedule, financial_breakdown).
+     Значения из data/ (названия каналов, коды нарушений) не переводим. */
+  var I18N = {
+    ru: {
+      'h.plan': 'План снабжения',
+      'h.planHint': 'Зарезервированная мощность по каналам, т/год. Серым под строкой фактическая поставка в выбранном сценарии.',
+      'h.balance': 'Баланс по годам', 'h.totals': 'Итог 2035–2040',
+      'h.totalsHint': 'Один план в двух контрольных сценариях.', 'h.costStructure': 'Структура расходов',
+      'h.totalsNote': 'Деньги в млн условных единиц в постоянных ценах 2035 года. Выручки и стоимости срыва миссии в кейсе нет, поэтому сравниваются расходы.',
+      'kpi.base': 'BASE, приведённые', 'kpi.stress': 'Стресс, приведённые',
+      'kpi.slBase': 'Обслуживание BASE', 'kpi.slStress': 'Обслуживание стресс',
+      'plan.channel': 'Канал', 'plan.ordered': 'Отбор, т', 'plan.demandRow': 'Спрос сценария, т',
+      'plan.reserveRow': 'резерв 45 суток, т', 'plan.delivered': 'поставлено', 'plan.of': 'из',
+      'year.metric': 'Показатель', 'year.demand': 'Спрос, т', 'year.critical': 'Критический, т',
+      'year.supply': 'Поставка, т', 'year.losses': 'Потери, т', 'year.served': 'Выдано, т',
+      'year.shortage': 'Дефицит, т', 'year.closing': 'Запас на конец, т',
+      'year.slTotal': 'Обслуживание общее', 'year.slCritical': 'Обслуживание критическое',
+      'year.cost': 'Расходы года, млн', 'year.capex': 'в том числе CAPEX',
+      'tot.rowCost': 'Все расходы, млн', 'tot.rowPerT': 'Расход на тонну, млн',
+      'tot.rowShortage': 'Дефицит, т', 'tot.rowLosses': 'Потери, т', 'tot.rowSlCrit': 'Обслужен критический',
+      'tot.base': 'BASE', 'tot.stress': 'Стресс',
+      'cost.procurement': 'закупки', 'cost.reservation': 'резерв мощности', 'cost.holding': 'хранение',
+      'cost.opex': 'OPEX', 'cost.capex': 'CAPEX'
+    },
+    en: {
+      'h.plan': 'Supply plan',
+      'h.planHint': 'Reserved capacity by channel, t/year. Grey row: actual delivery in the selected scenario.',
+      'h.balance': 'Yearly balance', 'h.totals': 'Summary 2035–2040',
+      'h.totalsHint': 'One plan in two control scenarios.', 'h.costStructure': 'Cost structure',
+      'h.totalsNote': 'Money in million conventional units at constant 2035 prices. The case has no revenue or mission-failure cost, so costs are compared instead.',
+      'kpi.base': 'BASE, discounted', 'kpi.stress': 'Stress, discounted',
+      'kpi.slBase': 'Service level BASE', 'kpi.slStress': 'Service level stress',
+      'plan.channel': 'Channel', 'plan.ordered': 'Withdrawal, t', 'plan.demandRow': 'Scenario demand, t',
+      'plan.reserveRow': '45-day reserve, t', 'plan.delivered': 'delivered', 'plan.of': 'of',
+      'year.metric': 'Metric', 'year.demand': 'Demand, t', 'year.critical': 'Critical, t',
+      'year.supply': 'Supply, t', 'year.losses': 'Losses, t', 'year.served': 'Served, t',
+      'year.shortage': 'Shortage, t', 'year.closing': 'Closing stock, t',
+      'year.slTotal': 'Total service level', 'year.slCritical': 'Critical service level',
+      'year.cost': 'Year cost, mln', 'year.capex': 'of which CAPEX',
+      'tot.rowCost': 'Total cost, mln', 'tot.rowPerT': 'Cost per t, mln',
+      'tot.rowShortage': 'Shortage, t', 'tot.rowLosses': 'Losses, t', 'tot.rowSlCrit': 'Critical served',
+      'tot.base': 'BASE', 'tot.stress': 'Stress',
+      'cost.procurement': 'procurement', 'cost.reservation': 'capacity reservation', 'cost.holding': 'holding',
+      'cost.opex': 'OPEX', 'cost.capex': 'CAPEX'
+    }
+  };
+  function tr(key) { return (I18N[state.lang] && I18N[state.lang][key]) || I18N.ru[key] || key; }
+  function applyI18n() { $$('[data-i18n]').forEach(function (el) { el.textContent = tr(el.dataset.i18n); }); }
+
   /* Причина, которую видит пользователь на каждом отключённом элементе.
      Молча неработающих кнопок в интерфейсе быть не должно. */
   var DEMO_WHY = 'Демо-снимок: расчёт не пересчитывается. Запустите python run.py и обновите страницу';
 
   var state = { live: false, base: '', case_: null, scenarios: [], plans: {}, planKey: null, plan: null,
-                scenario: 'BASE', runs: {}, tab: 'plan', busy: 0, pending: false, saved: [] };
+                scenario: 'BASE', runs: {}, tab: 'plan', busy: 0, pending: false, saved: [], lang: 'ru',
+                tl: { playing: false, t: 0, speed: 1, months: null, log: null, raf: null, last: 0, capTimer: null } };
 
   /* ---------------- связь с бэкендом ---------------- */
   /* Адреса, по которым ищем API: сначала свой origin, потом локальные порты —
@@ -484,25 +636,98 @@ select:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
   var STATUS_RU = { CASE_INPUT: 'данные организатора', TEAM_SENSITIVITY: 'чувствительность команды',
                     TEAM_RESEARCH: 'исследование команды' };
 
+  /* Кастомный выпадающий список: кнопка + свой listbox вместо <select>, у которого
+     в части браузеров список рисуется светлым поверх тёмной темы. */
+  function setupDropdown(prefix) {
+    var btn = $('#' + prefix + 'Btn'), list = $('#' + prefix + 'List');
+    function close() { list.hidden = true; btn.setAttribute('aria-expanded', 'false'); }
+    function open() {
+      $$('.ddown-list').forEach(function (l) { l.hidden = true; });
+      $$('.ddown-btn').forEach(function (b) { b.setAttribute('aria-expanded', 'false'); });
+      list.hidden = false; btn.setAttribute('aria-expanded', 'true');
+    }
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (btn.disabled) return;
+      if (list.hidden) open(); else close();
+    });
+    return { open: open, close: close, list: list, btn: btn };
+  }
+  document.addEventListener('click', function (e) {
+    $$('.ddown-list').forEach(function (l) {
+      if (!l.hidden && !l.contains(e.target) && !l.parentNode.querySelector('.ddown-btn').contains(e.target)) l.hidden = true;
+    });
+    $$('.ddown-btn').forEach(function (b) { if (b.getAttribute('aria-expanded') === 'true' && b.parentNode.querySelector('.ddown-list').hidden) b.setAttribute('aria-expanded', 'false'); });
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    $$('.ddown-list').forEach(function (l) { l.hidden = true; });
+    $$('.ddown-btn').forEach(function (b) { b.setAttribute('aria-expanded', 'false'); });
+  });
+  var scenarioDd, planDd;
+
   function fillScenarios() {
-    var sel = $('#scenario');
-    sel.innerHTML = state.scenarios.map(function (s) {
+    if (!scenarioDd) scenarioDd = setupDropdown('scenario');
+    $('#scenarioList').innerHTML = state.scenarios.map(function (s) {
       var st = STATUS_RU[s.status] || s.status;
-      return '<option value="' + s.scenario_id + '" title="' + escapeHtml(s.scenario_id + ' — ' + st) + '">' +
-        escapeHtml(s.label || s.scenario_id) + ' · ' + escapeHtml(st) + '</option>';
+      return '<button type="button" role="option" data-id="' + s.scenario_id + '"><b>' +
+        escapeHtml(s.label || s.scenario_id) + '</b><span class="sub">' + escapeHtml(s.scenario_id + ' · ' + st) + '</span></button>';
     }).join('');
     if (!state.scenarios.some(function (s) { return s.scenario_id === state.scenario; })) {
       state.scenario = state.scenarios.length ? state.scenarios[0].scenario_id : 'BASE';
     }
-    sel.value = state.scenario;
+    $$('#scenarioList button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        state.scenario = b.dataset.id;
+        scenarioDd.close();
+        syncScenarioUI();
+        recompute();
+      });
+    });
+    syncScenarioUI();
+  }
+
+  function syncScenarioUI() {
+    var s = state.scenarios.filter(function (x) { return x.scenario_id === state.scenario; })[0];
+    $('#scenarioName').textContent = s ? (s.label || s.scenario_id) : state.scenario;
+    $$('#scenarioList button').forEach(function (b) { b.classList.toggle('on', b.dataset.id === state.scenario); });
   }
 
   function fillPlans() {
-    var ps = $('#planSel');
-    ps.innerHTML = Object.keys(state.plans).map(function (k) {
-      return '<option value="' + k + '">' + escapeHtml(state.plans[k].name || k) + '</option>';
+    if (!planDd) planDd = setupDropdown('plan');
+    $('#planList').innerHTML = Object.keys(state.plans).map(function (k) {
+      return '<button type="button" role="option" data-id="' + k + '"><b>' + escapeHtml(state.plans[k].name || k) + '</b></button>';
     }).join('');
-    ps.value = state.planKey;
+    $$('#planList button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        selectPlan(b.dataset.id);
+        planDd.close();
+      });
+    });
+    syncPlanUI();
+  }
+
+  function syncPlanUI() {
+    $('#planName').textContent = (state.plans[state.planKey] && state.plans[state.planKey].name) || state.planKey || '—';
+    $$('#planList button').forEach(function (b) { b.classList.toggle('on', b.dataset.id === state.planKey); });
+  }
+
+  /* Общая точка выбора плана в интерфейсе: используется и кликом по списку,
+     и после автоплана/сброса/открытия сохранённого — везде синхронизирует одно и то же. */
+  function selectPlan(key) {
+    state.planKey = key;
+    state.plan = clone(state.plans[key]);
+    syncPlanUI();
+    if (!state.live && key !== state.demoPlanKey) {
+      $('#planNote').textContent = 'В демо-снимке посчитан только план «' +
+        (state.plans[state.demoPlanKey].name || state.demoPlanKey) + '». Запустите бэкенд, чтобы считать остальные.';
+      $('#planNote').className = 'hint bad';
+      state.planKey = state.demoPlanKey;
+      state.plan = clone(state.plans[state.planKey]);
+      syncPlanUI();
+      return;
+    }
+    recompute();
   }
 
   function fillGeoSources() {
@@ -519,25 +744,20 @@ select:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
     if (built) return;      // вызывается и при старте, и при переходе демо → живой режим
     built = true;
 
-    $('#scenario').addEventListener('change', function () {
-      state.scenario = $('#scenario').value;
-      recompute();
+    $$('#langSeg button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        state.lang = b.dataset.v;
+        $$('#langSeg button').forEach(function (x) { x.classList.toggle('on', x === b); });
+        applyI18n();
+        render();
+      });
     });
 
-    var ps = $('#planSel');
-    ps.addEventListener('change', function () {
-      state.planKey = ps.value;
-      state.plan = clone(state.plans[state.planKey]);
-      if (!state.live && state.planKey !== state.demoPlanKey) {
-        $('#planNote').textContent = 'В демо-снимке посчитан только план «' +
-          (state.plans[state.demoPlanKey].name || state.demoPlanKey) + '». Запустите бэкенд, чтобы считать остальные.';
-        $('#planNote').className = 'hint bad';
-        ps.value = state.demoPlanKey;
-        state.planKey = state.demoPlanKey;
-        state.plan = clone(state.plans[state.planKey]);
-        return;
-      }
-      recompute();
+    $('#hidePanelsBtn').addEventListener('click', function () {
+      var on = document.body.classList.toggle('hide-panels');
+      $('#hidePanelsBtn').classList.toggle('on', on);
+      $('#hidePanelsBtn').setAttribute('aria-pressed', on ? 'true' : 'false');
+      $('#hidePanelsBtn').title = on ? 'Показать боковые панели' : 'Скрыть боковые панели';
     });
 
     var inv = [
@@ -547,9 +767,10 @@ select:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
       ['EARTH_NEW_EXERCISE', 'Реализация опциона', [null, 2035, 2036, 2037, 2038]]
     ];
     $('#invest').innerHTML = inv.map(function (row) {
+      var note = investNote(row[0]);
       return '<h3>' + row[1] + '</h3><div class="seg" data-inv="' + row[0] + '">' +
         row[2].map(function (y) { return '<button data-y="' + y + '">' + (y === null ? 'Нет' : y) + '</button>'; }).join('') +
-        '</div>';
+        '</div>' + (note ? '<p class="inv-sub">' + note + '</p>' : '');
     }).join('');
     $$('#invest .seg button').forEach(function (b) {
       b.addEventListener('click', function () {
@@ -576,10 +797,11 @@ select:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
       b.addEventListener('click', function () {
         state.tab = b.dataset.tab;
         $$('#tabs button').forEach(function (x) { x.classList.toggle('on', x === b); });
-        ['plan', 'balance', 'checks', 'sens', 'risks', 'horizon'].forEach(function (t) {
+        ['plan', 'node', 'balance', 'checks', 'sens', 'risks', 'horizon'].forEach(function (t) {
           $('#tab-' + t).hidden = t !== state.tab;
         });
         if (state.tab === 'horizon' && state.live) loadHorizon('increment');
+        if (state.tab !== 'balance') tlPause();
       });
     });
     $$('#horizonMethods button').forEach(function (b) {
@@ -615,7 +837,6 @@ select:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
           state.planKey = '__auto__';
           state.plans.__auto__ = clone(envelope);
           fillPlans();
-          $('#planSel').value = '__auto__';
           say('Автоплан построен ядром для сценария ' + state.scenario + '. Интерфейс ничего не считает сам.');
           recompute();
         })
@@ -634,7 +855,6 @@ select:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
         state.planKey = presets[key] ? key : Object.keys(presets)[0];
         state.plan = clone(state.plans[state.planKey]);
         fillPlans();
-        $('#planSel').value = state.planKey;
         clearError();
         say('План возвращён к файлу configs/plans/' + state.planKey + '.json');
         recompute();
@@ -665,7 +885,6 @@ select:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
           state.planKey = '__saved__';
           state.plans.__saved__ = clone(envelope);
           fillPlans();
-          $('#planSel').value = '__saved__';
           say('Открыт сохранённый план ' + id);
           recompute();
         })
@@ -682,6 +901,9 @@ select:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
       say('Вернулись к контрольным ценам сценария ' + state.scenario + '.');
       recompute();
     });
+
+    applyI18n();
+    setupTimeline();
   }
 
   function note(text, bad) {
@@ -763,6 +985,35 @@ select:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
     renderTotals();
   }
 
+  /* Подпись под переключателем инвестиции: только числа, уже пришедшие с бэкенда
+     (investment_options.csv / storage_options.csv через /api/case), ничего не добавляем. */
+  function investNote(key) {
+    var c = state.case_;
+    if (!c) return '';
+    if (key === 'ZBO') {
+      var st = (c.storage || []).filter(function (x) { return x.storage_id === 'ZBO'; })[0];
+      return st ? 'CAPEX ' + f0(st.capex_mln) + ' млн, с ' + st.available_from_year + ' года: ёмкость ' +
+        f0(st.capacity_t) + ' т, потери ' + pc(st.loss_rate_on_throughput) + ', OPEX ' +
+        f0(st.fixed_opex_mln_per_year) + ' млн/год.' : '';
+    }
+    if (key === 'LUNAR_ISRU') {
+      var inv = (c.investments || []).filter(function (x) { return x.investment_id === 'LUNAR_ISRU'; })[0];
+      var src = (c.sources || []).filter(function (x) { return x.source_id === 'D'; })[0];
+      return inv ? 'CAPEX ' + f0(inv.total_capex_mln) + ' млн, OPEX ' + f0(inv.fixed_opex_mln_per_year) +
+        ' млн/год' + (src ? ', канал доступен не раньше ' + src.available_from_year + ' года' : '') + '.' : '';
+    }
+    if (key === 'EARTH_NEW_OPTION') {
+      var inv = (c.investments || []).filter(function (x) { return x.investment_id === 'EARTH_NEW'; })[0];
+      return inv ? 'Право ввода нового поставщика: ' + f0(inv.option_fee_mln) + ' млн.' : '';
+    }
+    if (key === 'EARTH_NEW_EXERCISE') {
+      var inv = (c.investments || []).filter(function (x) { return x.investment_id === 'EARTH_NEW'; })[0];
+      return inv ? 'Реализация опциона: ещё ' + f0(inv.exercise_cost_mln) + ' млн, итого ' +
+        f0(inv.total_capex_mln) + ' млн с правом ввода.' : '';
+    }
+    return '';
+  }
+
   /* Лимиты CAPEX берём из ограничений организатора, а не вписываем числа в интерфейс. */
   function capexLimit(id, fallback) {
     var c = (state.case_ && state.case_.constraints || []).filter(function (x) { return x.constraint_id === id; })[0];
@@ -782,6 +1033,15 @@ select:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
     $$('#reserveMode button').forEach(function (b) {
       b.classList.toggle('on', b.dataset.v === state.plan.decisions.inventory_policy.mode);
     });
+    var rc = (state.case_ && state.case_.constraints || []).filter(function (x) { return x.constraint_id === 'RESERVE_45D'; })[0];
+    var lastYear = run && run.years && run.years[run.years.length - 1];
+    if (state.plan.decisions.inventory_policy.mode === 'physical') {
+      $('#reserveHint').textContent = 'R = годовой спрос × 45 / 365, проверяется на начало каждого года.' +
+        (lastYear ? ' В ' + lastYear.year + ' году это ' + f1(lastYear.reserve_required_t) + ' т.' : '');
+    } else {
+      $('#reserveHint').textContent = 'Аварийный контракт засчитывается, только если объём приходит в срок ' +
+        'поставки аварийного канала — движок проверяет это по ограничению ' + (rc ? rc.constraint_id : 'RESERVE_45D') + '.';
+    }
     var rate = state.plan.assumptions.discount_rate * 100;
     $('#rate').value = rate;
     $('#rate').style.setProperty('--p', (rate / 15 * 100) + '%');
@@ -809,7 +1069,7 @@ select:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
 
   function renderPlan(run) {
     var years = state.case_.years;
-    var head = '<thead><tr><th>Канал</th>' + years.map(function (y) { return '<th>' + y + '</th>'; }).join('') + '<th>Отбор, т</th></tr></thead>';
+    var head = '<thead><tr><th>' + tr('plan.channel') + '</th>' + years.map(function (y) { return '<th>' + y + '</th>'; }).join('') + '<th>' + tr('plan.ordered') + '</th></tr></thead>';
     var body = state.case_.sources.map(function (s) {
       var total = 0;
       run.years.forEach(function (y) { total += y.ordered_t[s.source_id] || 0; });
@@ -819,17 +1079,17 @@ select:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
       }).join('');
       var fact = run.years.map(function (y) {
         var o = y.ordered_t[s.source_id] || 0, d = y.delivered_t[s.source_id] || 0;
-        return '<td>' + (o > 0.05 ? f0(d) + (Math.abs(d - o) > 0.05 ? ' из ' + f0(o) : '') : '—') + '</td>';
+        return '<td>' + (o > 0.05 ? f0(d) + (Math.abs(d - o) > 0.05 ? ' ' + tr('plan.of') + ' ' + f0(o) : '') : '—') + '</td>';
       }).join('');
       return '<tr><td><span class="src"><i class="sw" style="background:' + (COLOR[s.source_id] || 'var(--ink-3)') + '"></i>' +
         '<span><b>' + s.source_id + ' ' + s.name + '</b><br><span>до ' + f0(s.capacity_t_per_year) + ' т/год, ' +
         f1(s.variable_cost_mln_per_t) + ' млн/т, ToP ' + pc(s.take_or_pay_share) + '</span></span></span></td>' +
         cells + '<td>' + f0(total) + '</td></tr>' +
-        '<tr class="fact"><td>поставлено</td>' + fact + '<td></td></tr>';
+        '<tr class="fact"><td>' + tr('plan.delivered') + '</td>' + fact + '<td></td></tr>';
     }).join('');
-    var dem = '<tr class="sum"><td>Спрос сценария, т</td>' + run.years.map(function (y) {
+    var dem = '<tr class="sum"><td>' + tr('plan.demandRow') + '</td>' + run.years.map(function (y) {
       return '<td>' + f0(y.demand_total_t) + '</td>'; }).join('') + '<td></td></tr>';
-    var res = '<tr class="fact"><td>резерв 45 суток, т</td>' + run.years.map(function (y) {
+    var res = '<tr class="fact"><td>' + tr('plan.reserveRow') + '</td>' + run.years.map(function (y) {
       return '<td>' + f1(y.reserve_required_t) + '</td>'; }).join('') + '<td></td></tr>';
     $('#planTable').innerHTML = head + '<tbody>' + body + dem + res + '</tbody>';
     $$('#planTable input').forEach(function (inp) {
@@ -861,19 +1121,19 @@ select:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
 
   function renderYears(run) {
     var rows = [
-      ['Спрос, т', function (y) { return f0(y.demand_total_t); }],
-      ['Критический, т', function (y) { return f0(y.demand_critical_t); }],
-      ['Поставка, т', function (y) { return f0(y.gross_t); }],
-      ['Потери, т', function (y) { return f1(y.losses_t); }],
-      ['Выдано, т', function (y) { return f0(y.served_t); }],
-      ['Дефицит, т', function (y) { return f1(y.shortage_t); }, function (y) { return y.shortage_t > 0.05 ? 'bad' : ''; }],
-      ['Запас на конец, т', function (y) { return f1(y.closing_t); }],
-      ['Обслуживание общее', function (y) { return pc(y.sl_total); }, function (y) { return y.sl_total < 0.97 ? 'bad' : 'good'; }],
-      ['Обслуживание критическое', function (y) { return pc(y.sl_critical); }, function (y) { return y.sl_critical < 0.99 ? 'bad' : 'good'; }],
-      ['Расходы года, млн', function (y) { return f0(y.total_cost_mln); }],
-      ['в том числе CAPEX', function (y) { return f0(y.cost.capex); }]
+      [tr('year.demand'), function (y) { return f0(y.demand_total_t); }],
+      [tr('year.critical'), function (y) { return f0(y.demand_critical_t); }],
+      [tr('year.supply'), function (y) { return f0(y.gross_t); }],
+      [tr('year.losses'), function (y) { return f1(y.losses_t); }],
+      [tr('year.served'), function (y) { return f0(y.served_t); }],
+      [tr('year.shortage'), function (y) { return f1(y.shortage_t); }, function (y) { return y.shortage_t > 0.05 ? 'bad' : ''; }],
+      [tr('year.closing'), function (y) { return f1(y.closing_t); }],
+      [tr('year.slTotal'), function (y) { return pc(y.sl_total); }, function (y) { return y.sl_total < 0.97 ? 'bad' : 'good'; }],
+      [tr('year.slCritical'), function (y) { return pc(y.sl_critical); }, function (y) { return y.sl_critical < 0.99 ? 'bad' : 'good'; }],
+      [tr('year.cost'), function (y) { return f0(y.total_cost_mln); }],
+      [tr('year.capex'), function (y) { return f0(y.cost.capex); }]
     ];
-    $('#yearTable').innerHTML = '<thead><tr><th>Показатель</th>' +
+    $('#yearTable').innerHTML = '<thead><tr><th>' + tr('year.metric') + '</th>' +
       run.years.map(function (y) { return '<th>' + y.year + '</th>'; }).join('') + '</tr></thead><tbody>' +
       rows.map(function (r) {
         return '<tr><td>' + r[0] + '</td>' + run.years.map(function (y) {
@@ -881,6 +1141,10 @@ select:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
       }).join('') + '</tbody>';
     $('#balanceNote').textContent = 'Сценарий ' + run.scenario_id + '. Материальный баланс: запас на конец равен запасу на начало плюс поставка минус потери минус выдача.';
     drawStock(run);
+    tlPause();
+    state.tl.t = 0;
+    $('#tlCaption').classList.remove('show');
+    drawTlChart(run);
   }
 
   function drawStock(run) {
@@ -907,6 +1171,151 @@ select:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
     out += line(function (y) { return y.closing_t; }, 'var(--frost)');
     out += '<text x="6" y="' + (T + 8) + '" fill="var(--ink-3)" font-size="10">т</text>';
     $('#stockChart').innerHTML = out;
+  }
+
+  /* ---------------- таймлайн по месяцам ----------------
+     Все данные (помесячная трасса и журнал событий) уже посчитаны движком
+     (run.months, run.log — src/kriokontur/engine.py) и получены с /api/compare,
+     здесь только отрисовка и воспроизведение, никакой новой арифметики. */
+  var MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+  var MONTHS_EN = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  var EVENT_COLOR = { violation: 'var(--alarm)', emergency: 'var(--sE)', shortage: '#ff9c91', investment: 'var(--foil)' };
+
+  function monthLabel(idx) {
+    var names = state.lang === 'en' ? MONTHS_EN : MONTHS_RU;
+    var base = (state.case_ && state.case_.years[0]) || 2035;
+    return names[((idx % 12) + 12) % 12] + ' ' + (base + Math.floor(idx / 12));
+  }
+
+  function drawTlChart(run) {
+    var svg = $('#tlChart');
+    if (!svg) return;
+    run = run || state.runs[state.scenario] || state.runs.BASE;
+    if (!run || !run.months || !run.months.length) {
+      svg.innerHTML = '';
+      state.tl.months = null; state.tl.log = null; state.tl.geom = null;
+      $('#tlPlay').disabled = true; $('#tlSpeed').disabled = true;
+      $('#tlDate').textContent = '—';
+      return;
+    }
+    $('#tlPlay').disabled = false; $('#tlSpeed').disabled = false;
+    var months = run.months;
+    state.tl.months = months;
+    state.tl.log = run.log || [];
+    var W = 720, H = 170, L = 40, R = 10, T = 14, B = 22;
+    var n = months.length;
+    var maxS = Math.max.apply(null, months.map(function (m) { return Math.max(m.closing_t, m.target_t); })) * 1.15 || 1;
+    var x = function (i) { return L + (W - L - R) * i / n; };
+    var y = function (v) { return H - B - Math.min(1, v / maxS) * (H - T - B); };
+    var years = state.case_.years;
+    var out = '';
+    years.forEach(function (yr, i) {
+      var xx = x(i * 12);
+      out += '<line x1="' + xx.toFixed(1) + '" y1="' + T + '" x2="' + xx.toFixed(1) + '" y2="' + (H - B) + '" stroke="rgba(255,255,255,.07)"/>' +
+        '<text x="' + (xx + 4).toFixed(1) + '" y="' + (H - 6) + '" fill="var(--ink-3)" font-size="10">' + yr + '</text>';
+    });
+    var line = function (fn, color, dash) {
+      var d = months.map(function (m, i) { return (i ? 'L' : 'M') + x(i + 0.5).toFixed(1) + ' ' + y(fn(m)).toFixed(1); }).join('');
+      return '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="1.5"' + (dash ? ' stroke-dasharray="4 4"' : '') + '/>';
+    };
+    out += line(function (m) { return m.target_t; }, 'rgba(233,238,245,.4)', true);
+    out += '<path d="' + months.map(function (m, i) { return (i ? 'L' : 'M') + x(i + 0.5).toFixed(1) + ' ' + y(m.closing_t).toFixed(1); }).join('') +
+      ' L' + x(n - 0.5).toFixed(1) + ' ' + (H - B) + ' L' + x(0.5).toFixed(1) + ' ' + (H - B) + ' Z" fill="rgba(158,211,245,.14)"/>';
+    out += line(function (m) { return m.closing_t; }, 'var(--frost)');
+    months.forEach(function (m, i) {
+      if (m.shortage_t > 0.05) {
+        out += '<rect x="' + (x(i) + 0.4).toFixed(1) + '" y="' + (H - B - 5) + '" width="' +
+          Math.max(1.2, x(i + 1) - x(i) - 0.8).toFixed(1) + '" height="5" fill="var(--alarm)"/>';
+      }
+    });
+    (run.log || []).forEach(function (e) {
+      if (e.month < 0 || e.month >= n) return;
+      out += '<circle cx="' + x(e.month + 0.5).toFixed(1) + '" cy="' + (T + 3) + '" r="2.6" fill="' +
+        (EVENT_COLOR[e.kind] || 'var(--ink-2)') + '"><title>' + escapeHtml(e.title) + '</title></circle>';
+    });
+    out += '<g id="tlPlayhead"><line x1="0" y1="' + (T - 4) + '" x2="0" y2="' + (H - B + 3) + '" stroke="var(--ink)" stroke-width="1.2"/>' +
+      '<circle cx="0" cy="' + (T - 4) + '" r="3" fill="var(--ink)"/></g>';
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    svg.innerHTML = out;
+    state.tl.geom = { x: x, n: n };
+    updateTlPlayhead();
+    updateTlDate();
+  }
+
+  function updateTlPlayhead() {
+    var g = $('#tlPlayhead');
+    if (g && state.tl.geom) g.setAttribute('transform', 'translate(' + state.tl.geom.x(state.tl.t).toFixed(1) + ',0)');
+  }
+
+  function updateTlDate() {
+    var n = state.tl.months ? state.tl.months.length : 0;
+    $('#tlDate').textContent = n ? monthLabel(Math.max(0, Math.min(n - 1, Math.floor(state.tl.t)))) : '—';
+  }
+
+  function seekTl(t) {
+    if (!state.tl.geom) return;
+    state.tl.t = Math.max(0, Math.min(state.tl.geom.n - 0.001, t));
+    updateTlPlayhead();
+    updateTlDate();
+  }
+
+  function tlPlay() {
+    if (!state.tl.months || !state.tl.months.length || state.tl.playing) return;
+    if (state.tl.t >= state.tl.months.length - 0.01) state.tl.t = 0;
+    state.tl.playing = true;
+    $('#tlPlayIcon').innerHTML = '<rect x="2" y="1.5" width="3.4" height="11" fill="currentColor"/><rect x="8.6" y="1.5" width="3.4" height="11" fill="currentColor"/>';
+    state.tl.last = 0;
+    state.tl.raf = requestAnimationFrame(tlTick);
+  }
+
+  function tlPause() {
+    state.tl.playing = false;
+    $('#tlPlayIcon').innerHTML = '<path d="M3 1.5v11l9-5.5-9-5.5Z" fill="currentColor"/>';
+    if (state.tl.raf) cancelAnimationFrame(state.tl.raf);
+    state.tl.raf = null;
+  }
+
+  function tlTick(ts) {
+    if (!state.tl.playing) return;
+    var dt = state.tl.last ? Math.min(0.08, (ts - state.tl.last) / 1000) : 0;
+    state.tl.last = ts;
+    var n = state.tl.months.length;
+    var prev = state.tl.t;
+    var next = prev + dt * 2.2 * state.tl.speed;
+    var done = next >= n;
+    state.tl.t = done ? n - 0.001 : next;
+    updateTlPlayhead();
+    updateTlDate();
+    if (state.tl.log) {
+      var passed = state.tl.log.filter(function (e) { return e.month > prev && e.month <= state.tl.t; });
+      if (passed.length) showTlCaption(passed[0]);
+    }
+    if (done) { tlPause(); return; }
+    state.tl.raf = requestAnimationFrame(tlTick);
+  }
+
+  function showTlCaption(e) {
+    var box = $('#tlCaption');
+    $('#tlCapTitle').textContent = e.title;
+    $('#tlCapText').textContent = e.text;
+    box.classList.toggle('alarm', e.kind === 'violation' || e.kind === 'emergency' || e.kind === 'shortage');
+    box.classList.add('show');
+    clearTimeout(state.tl.capTimer);
+    state.tl.capTimer = setTimeout(function () { box.classList.remove('show'); }, 4200);
+  }
+
+  function setupTimeline() {
+    $('#tlPlay').addEventListener('click', function () { state.tl.playing ? tlPause() : tlPlay(); });
+    $('#tlSpeed').addEventListener('click', function () {
+      state.tl.speed = state.tl.speed === 1 ? 2 : (state.tl.speed === 2 ? 0.5 : 1);
+      $('#tlSpeed').textContent = '×' + String(state.tl.speed).replace('.', ',');
+    });
+    $('#tlChart').addEventListener('click', function (e) {
+      if (!state.tl.geom) return;
+      tlPause();
+      var rect = $('#tlChart').getBoundingClientRect();
+      seekTl((e.clientX - rect.left) / rect.width * state.tl.geom.n);
+    });
   }
 
   function vioList(list) {
@@ -941,19 +1350,19 @@ select:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
     $('#kpiSlBase').className = b.totals.sl_total < 0.97 ? 'bad' : '';
     $('#kpiSlStress').className = s.totals.sl_total < 0.97 ? 'bad' : '';
     var rows = [
-      ['Все расходы, млн', 'total_cost_mln', f0],
-      ['Расход на тонну, млн', 'cost_per_served_t', f1],
-      ['Дефицит, т', 'shortage_t', f1],
-      ['Потери, т', 'losses_t', f1],
-      ['Обслужен критический', 'sl_critical', pc]
+      [tr('tot.rowCost'), 'total_cost_mln', f0],
+      [tr('tot.rowPerT'), 'cost_per_served_t', f1],
+      [tr('tot.rowShortage'), 'shortage_t', f1],
+      [tr('tot.rowLosses'), 'losses_t', f1],
+      [tr('tot.rowSlCrit'), 'sl_critical', pc]
     ];
-    $('#totalsTable').innerHTML = '<thead><tr><th></th><th>BASE</th><th>Стресс</th></tr></thead><tbody>' +
+    $('#totalsTable').innerHTML = '<thead><tr><th></th><th>' + tr('tot.base') + '</th><th>' + tr('tot.stress') + '</th></tr></thead><tbody>' +
       rows.map(function (r) {
         return '<tr><td>' + r[0] + '</td><td>' + r[2](b.totals[r[1]]) + '</td><td>' + r[2](s.totals[r[1]]) + '</td></tr>';
       }).join('') + '</tbody>';
     var run = state.runs[state.scenario] || b;
-    var parts = [['procurement', 'закупки', 'var(--frost)'], ['reservation', 'резерв мощности', 'var(--sC)'],
-                 ['holding', 'хранение', 'var(--sB)'], ['fixed_opex', 'OPEX', '#8aa0c2'], ['capex', 'CAPEX', 'var(--foil)']];
+    var parts = [['procurement', tr('cost.procurement'), 'var(--frost)'], ['reservation', tr('cost.reservation'), 'var(--sC)'],
+                 ['holding', tr('cost.holding'), 'var(--sB)'], ['fixed_opex', tr('cost.opex'), '#8aa0c2'], ['capex', tr('cost.capex'), 'var(--foil)']];
     var total = run.totals.total_cost_mln;
     $('#costBars').innerHTML = parts.map(function (p) {
       return '<i style="width:' + (run.totals[p[0]] / total * 100).toFixed(1) + '%;background:' + p[2] + '"></i>';
@@ -984,7 +1393,7 @@ select:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
   function renderSens(data) {
     if (!data) return;
     var maxSwing = Math.max.apply(null, data.tornado.map(function (r) { return r.swing; })) || 1;
-    var t = '<table><thead><tr><th>Параметр</th><th>PV низ</th><th>PV верх</th><th>Размах</th><th>Ломает план</th></tr></thead><tbody>' +
+    var t = '<table><thead><tr><th>Параметр</th><th>PV низ</th><th>PV верх</th><th>Размах</th><th>Нарушает лимит</th></tr></thead><tbody>' +
       data.tornado.map(function (r) {
         return '<tr><td>' + r.label + '<div class="bars" style="height:5px;margin-top:5px"><i style="width:' +
           (r.swing / maxSwing * 100).toFixed(0) + '%;background:var(--foil)"></i></div></td><td>' +

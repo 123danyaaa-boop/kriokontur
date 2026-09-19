@@ -12,3 +12,6 @@ env/
 .idea/
 .vscode/
 .DS_Store
+
+case_docs/
+legacy_mvp/

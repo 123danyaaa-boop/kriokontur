@@ -1,7 +1,8 @@
 .venv
 
-.idea
-.git
+.idea/
+.git/
+
 .gitignore
 
 start.bat
