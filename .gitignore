@@ -15,3 +15,5 @@ env/
 
 case_docs/
 legacy_mvp/
+/audit_docs/
+CLAUDE.md

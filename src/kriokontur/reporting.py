@@ -260,6 +260,28 @@ def export_sections(case: CaseInput, scenarios: Dict[str, Scenario], plan: Plan,
                ["total", "Полный обязательный стресс", dec["stress_pv_mln"], dec["total_delta_pv_mln"],
                 dec["delta_shortage_t"], ""]])
 
+    try:
+        from .contracts import contract_card, load_contracts, obligations
+        contracts = load_contracts()
+        card_keys = list(contract_card(case, contracts[0]).keys())
+        sections["contracts"] = [card_keys] + [
+            [contract_card(case, c)[k] for k in card_keys] for c in contracts]
+        rows = obligations(case, res, contracts)
+        ob_keys = list(rows[0].keys()) if rows else []
+        sections["contract_obligations"] = [ob_keys] + [
+            [("" if r[k] is None else r[k]) for k in ob_keys] for r in rows]
+    except Exception:            # карточки договоров не должны ломать выгрузку баланса
+        pass
+
+    try:
+        from .stakeholders import export_rows, impact
+        ids = [sid for sid in ("BASE", "MANDATORY_STRESS") if sid in scenarios]
+        risk_ids = [sid for sid in scenarios if sid.startswith("TEAM_RISK_")]
+        sections["stakeholders"] = export_rows(
+            impact(case, scenarios, plan, None, ids, "BASE", risk_ids))
+    except Exception:
+        pass
+
     if risks:
         from .risks import evaluate_risks
         rows = evaluate_risks(case, scenarios, plan, risks, "BASE")

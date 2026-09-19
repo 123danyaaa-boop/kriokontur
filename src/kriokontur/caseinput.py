@@ -38,6 +38,20 @@ class Source:
             return value / 30.44
         return value
 
+    def lead_time_days(self, use: str = "max") -> float:
+        """Срок поставки в сутках без округления до шага расчёта.
+
+        Нужен там, где требование кейса выражено в сутках: 45-дневный резерв и проверка
+        контрактного эквивалента. Округление недель до целых месячных шагов годится для
+        диспетчера, но завышает срок ожидания в проверке (6 недель это 42 дня, не 61).
+        """
+        value = self.lead_time_min if use == "min" else self.lead_time_max
+        if self.lead_time_unit == "week":
+            return value * 7.0
+        if self.lead_time_unit == "month":
+            return value * 365.0 / 12.0
+        return value
+
 
 @dataclass(frozen=True)
 class StorageOption:

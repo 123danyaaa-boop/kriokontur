@@ -361,7 +361,8 @@ def run(case: CaseInput, scenario: Scenario, plan: Plan) -> RunResult:
                     ia = arrive // MONTHS
                     allowance = min(plan.reserved("E", case.years[ia]), case.sources["E"].capacity_t_per_year)
                     remaining = max(0.0, allowance - emergency_booked.get(ia, 0.0))
-                    batch = reserved_e / MONTHS * lead_steps          # размер партии одного вызова
+                    batch = rules.emergency_batch(reserved_e, lead_steps, MONTHS,
+                                                  plan.assume("emergency_batch_t"))
                     want = min(-projected, batch, remaining)
                     if want > 1e-6:
                         emergency_booked[ia] = emergency_booked.get(ia, 0.0) + want

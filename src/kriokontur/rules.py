@@ -51,9 +51,22 @@ def reservation_payment(reservation_rate: float, annual_reserved_t_per_year: flo
     return reservation_rate * annual_reserved_t_per_year * period_fraction
 
 
-def reserve_days_to_tonnes(annual_demand_t: float, days: int = 45) -> float:
+def reserve_days_to_tonnes(annual_demand_t: float, days: float = 45) -> float:
     """V07. R_y = D_y * days / 365."""
     return annual_demand_t * days / DAYS_IN_YEAR
+
+
+def emergency_batch(reserved_t_per_year: float, lead_steps: int, months_in_year: int = MONTHS_IN_YEAR,
+                    explicit_batch_t=None) -> float:
+    """Объём одной партии аварийного канала, т.
+
+    По умолчанию партия равна месячной доле годового договора за срок поставки. Договор может
+    задать размер партии явно (assumptions.emergency_batch_t) — тогда берётся он. Годовой
+    договорный объём это отдельное ограничение и проверяется движком независимо.
+    """
+    if explicit_batch_t is not None:
+        return max(0.0, float(explicit_batch_t))
+    return reserved_t_per_year / months_in_year * lead_steps
 
 
 def service_level(served_t: float, demand_t: float) -> float:

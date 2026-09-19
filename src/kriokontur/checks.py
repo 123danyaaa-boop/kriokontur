@@ -285,15 +285,34 @@ def run_checks(case: CaseInput, scenario: Scenario, plan: Plan, years, capex: Di
                                          f"RESERVE_45D_NOT_MET year={yr.year} opening_inventory={yr.opening_t:.1f} "
                                          f"required={required:.1f} excess={required - yr.opening_t:.1f}"))
             else:
+                # договорный эквивалент: объём партии должен закрывать требование,
+                # а физический запас — период ожидания. Срок берётся в сутках из данных
+                # кейса (Emergency: 6 недель = 42 дня), а не округляется до месячных шагов:
+                # округление давало 61 день и делало вариант заведомо невыполнимым (D-25).
+                e = case.sources["E"]
                 lead_steps = int(plan.assume("emergency_lead_steps"))
-                callable_t = plan.reserved("E", yr.year) / 12 * lead_steps
-                waiting_cover = yr.demand_total_t * (lead_steps * 30.44) / rules.DAYS_IN_YEAR
+                lead_days = e.lead_time_days("max")
+                callable_t = rules.emergency_batch(plan.reserved("E", yr.year), lead_steps, 12,
+                                                   plan.assume("emergency_batch_t"))
+                callable_t = min(callable_t, plan.reserved("E", yr.year), e.capacity_t_per_year)
+                max_possible = min(rules.emergency_batch(e.capacity_t_per_year, lead_steps, 12,
+                                                         plan.assume("emergency_batch_t")),
+                                   e.capacity_t_per_year)
+                waiting_cover = yr.demand_total_t * lead_days / rules.DAYS_IN_YEAR
                 if callable_t < required - 1e-6 or yr.opening_t < waiting_cover - 1e-6:
+                    reason = ("партия меньше требуемого резерва" if callable_t < required - 1e-6
+                              else "запаса не хватает на время ожидания поставки")
+                    if max_possible < required - 1e-6:
+                        reason += (f"; при мощности канала {e.capacity_t_per_year:.0f} т/год "
+                                   f"максимально доступная партия {max_possible:.1f} т, "
+                                   f"эквивалент недостижим в принципе")
                     out.append(Violation("RESERVE_EQUIVALENCE_NOT_PROVEN", "hard", sid, yr.year,
-                                         "reserve_equivalent_days", round(callable_t, 2), round(required, 2), None,
+                                         "reserve_equivalent_days", round(callable_t, 2), round(required, 2),
+                                         round(max(0.0, required - callable_t), 2),
                                          f"RESERVE_EQUIVALENCE_NOT_PROVEN year={yr.year} callable_t={callable_t:.1f} "
                                          f"required={required:.1f} opening_inventory={yr.opening_t:.1f} "
-                                         f"waiting_cover_needed={waiting_cover:.1f}"))
+                                         f"waiting_cover_needed={waiting_cover:.1f} lead_time_days={lead_days:.0f} "
+                                         f"причина: {reason}"))
 
         # потолок потерь обязательного стресса
         ceiling = scenario.loss_ceiling(yr.year)

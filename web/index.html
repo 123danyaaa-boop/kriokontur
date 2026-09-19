@@ -238,6 +238,8 @@ input[type=text]{background:rgba(255,255,255,.05);border:1px solid var(--line);b
       <button data-tab="node">Узел</button>
       <button data-tab="balance">Баланс по годам</button>
       <button data-tab="compare">Сравнение</button>
+      <button data-tab="contracts">Договоры</button>
+      <button data-tab="stakeholders">Стороны</button>
       <button data-tab="checks">Проверки<span class="badge" id="vioBadge" hidden>0</span></button>
       <button data-tab="sens">Чувствительность</button>
       <button data-tab="risks">Риски</button>
@@ -320,6 +322,35 @@ input[type=text]{background:rgba(255,255,255,.05);border:1px solid var(--line);b
       <div id="stratBody"></div>
     </div>
 
+    <div class="card" id="tab-contracts" hidden>
+      <h2>Договоры и обязательства</h2>
+      <p class="hint">Карточка каждого канала: контрагент, объём, сроки и lead time, резервирование,
+        take-or-pay, оплата, ответственность и правила пересмотра. Числовые условия читаются
+        из данных организатора, коммерческая рамка это решение команды (TEAM_ASSUMPTION).</p>
+      <div class="toolbar">
+        <button class="btn" id="contractsBtn">Показать договоры и обязательства</button>
+        <span class="sp"></span>
+        <span class="status" id="contractsStatus"></span>
+      </div>
+      <div id="contractsBody" class="loading">нажмите кнопку: карточки и расчёт обязательств приходят с бэкенда</div>
+      <div id="obligationsBody"></div>
+      <div id="emergencyBody"></div>
+    </div>
+
+    <div class="card" id="tab-stakeholders" hidden>
+      <h2>Заинтересованные стороны</h2>
+      <p class="hint">Кто получает топливо, кто несёт затраты и риск, кто требует надёжности или
+        возврата вложений. Каждый интерес связан с метрикой расчёта и договором, поэтому видно,
+        как меняется положение стороны в стрессе и при реализации риска.</p>
+      <div class="toolbar">
+        <button class="btn" id="stkBtn">Посчитать последствия для сторон</button>
+        <label class="chip">риски <input type="checkbox" id="stkRisks" checked></label>
+        <span class="sp"></span>
+        <span class="status" id="stkStatus"></span>
+      </div>
+      <div id="stkBody" class="loading">нажмите кнопку, расчёт идёт на бэкенде</div>
+    </div>
+
     <div class="card" id="tab-checks" hidden>
       <h2>Проверки ограничений</h2>
       <p class="hint">Код, год, факт, лимит и причина. Формат совпадает со стартовым репозиторием кейса.</p>
@@ -363,6 +394,27 @@ input[type=text]{background:rgba(255,255,255,.05);border:1px solid var(--line);b
         <span class="status" id="geoStatus"></span>
       </div>
       <div id="geoBody"></div>
+
+      <h3>Свой сценарий: изменить исходные условия</h3>
+      <p class="hint">Редактор исследовательского сценария: спрос, цены каналов, фактическая доля
+        поставки и доступная мощность на выбранный интервал лет. Работает на копии — контрольные
+        файлы <code>data/*.csv</code> и <code>configs/scenarios</code> не меняются, статус результата
+        TEAM_RESEARCH, возврат к исходным условиям это выбор базового сценария.</p>
+      <div class="mini">
+        <label>спрос × <input type="number" id="csDemand" min="0.1" max="3" step="0.05" value="1"></label>
+        <label>цена × <input type="number" id="csPrice" min="0.1" max="5" step="0.05" value="1"></label>
+        <label>каналы цены <select id="csPriceSources" multiple size="3"></select></label>
+        <label>поставка × <input type="number" id="csDelivery" min="0" max="1" step="0.05" value="1"></label>
+        <label>каналы поставки <select id="csDeliverySources" multiple size="3"></select></label>
+        <label>мощность × <input type="number" id="csCapacity" min="0" max="2" step="0.05" value="1"></label>
+        <label>каналы мощности <select id="csCapacitySources" multiple size="3"></select></label>
+        <label>с <input type="number" id="csFrom" min="2035" max="2040" step="1" value="2036"></label>
+        <label>по <input type="number" id="csTo" min="2035" max="2040" step="1" value="2040"></label>
+        <button class="btn" id="csBtn">Посчитать свой сценарий</button>
+        <button class="btn" id="csResetBtn">Вернуть исходные условия</button>
+        <span class="status" id="csStatus"></span>
+      </div>
+      <div id="csBody"></div>
     </div>
 
     <div class="card" id="tab-horizon" hidden>
@@ -573,7 +625,9 @@ input[type=text]{background:rgba(255,255,255,.05);border:1px solid var(--line);b
   function liveOnly() {
     return $$('#invest button, #reserveMode button, #rate, #sensBtn, #csvBtn, #xlsxBtn, ' +
               '#autoplanBtn, #saveBtn, #openBtn, #resetBtn, #savedSel, #risksBtn, #mcBtn, #mcTrials, ' +
-              '#cmpBtn, #stratBtn, #importBtn, #planNameInput, ' +
+              '#cmpBtn, #stratBtn, #importBtn, #planNameInput, #contractsBtn, #stkBtn, #csBtn, ' +
+              '#csDemand, #csPrice, #csDelivery, #csCapacity, #csFrom, #csTo, ' +
+              '#csPriceSources, #csDeliverySources, #csCapacitySources, ' +
               '#geoBtn, #geoResetBtn, #geoSources, #geoFrom, #geoTo, #geoMult, #planTable input');
   }
 
@@ -783,12 +837,20 @@ input[type=text]{background:rgba(255,255,255,.05);border:1px solid var(--line);b
   }
 
   function fillGeoSources() {
-    var sel = $('#geoSources');
-    if (!sel || !state.case_) return;
-    sel.innerHTML = (state.case_.sources || []).map(function (s) {
-      return '<option value="' + s.source_id + '"' + (s.source_id === 'A' || s.source_id === 'B' ? ' selected' : '') +
-        '>' + escapeHtml(s.source_id + ' ' + s.name) + '</option>';
-    }).join('');
+    if (!state.case_) return;
+    var options = function (preselect) {
+      return (state.case_.sources || []).map(function (s) {
+        return '<option value="' + s.source_id + '"' + (preselect.indexOf(s.source_id) >= 0 ? ' selected' : '') +
+          '>' + escapeHtml(s.source_id + ' ' + s.name) + '</option>';
+      }).join('');
+    };
+    var geo = $('#geoSources');
+    if (geo) geo.innerHTML = options(['A', 'B']);
+    // те же каналы в редакторе исследовательского сценария
+    [['csPriceSources', ['A', 'B']], ['csDeliverySources', []], ['csCapacitySources', []]].forEach(function (pair) {
+      var el = $('#' + pair[0]);
+      if (el) el.innerHTML = options(pair[1]);
+    });
   }
 
   var built = false;
@@ -849,7 +911,7 @@ input[type=text]{background:rgba(255,255,255,.05);border:1px solid var(--line);b
       b.addEventListener('click', function () {
         state.tab = b.dataset.tab;
         $$('#tabs button').forEach(function (x) { x.classList.toggle('on', x === b); });
-        ['plan', 'node', 'balance', 'compare', 'checks', 'sens', 'risks', 'horizon'].forEach(function (t) {
+        ['plan', 'node', 'balance', 'compare', 'contracts', 'stakeholders', 'checks', 'sens', 'risks', 'horizon'].forEach(function (t) {
           $('#tab-' + t).hidden = t !== state.tab;
         });
         if (state.tab === 'horizon' && state.live) loadHorizon('increment');
@@ -982,6 +1044,20 @@ input[type=text]{background:rgba(255,255,255,.05);border:1px solid var(--line);b
     /* --- сравнение сценариев и стратегий --- */
     $('#cmpBtn').addEventListener('click', loadComparison);
     $('#stratBtn').addEventListener('click', loadStrategies);
+
+    /* --- договоры, стороны, свой сценарий --- */
+    $('#contractsBtn').addEventListener('click', loadContracts);
+    $('#stkBtn').addEventListener('click', loadStakeholders);
+    $('#csBtn').addEventListener('click', loadCustomScenario);
+    $('#csResetBtn').addEventListener('click', function () {
+      $('#csBody').innerHTML = '';
+      $('#csStatus').textContent = '';
+      ['csDemand', 'csPrice', 'csDelivery', 'csCapacity'].forEach(function (id) { $('#' + id).value = 1; });
+      $$('#csPriceSources option, #csDeliverySources option, #csCapacitySources option')
+        .forEach(function (o) { o.selected = false; });
+      say('Вернулись к исходным условиям сценария ' + state.scenario + ': контрольные данные не менялись.');
+      recompute();
+    });
 
     /* --- риски, Монте-Карло, геополитика --- */
     $('#risksBtn').addEventListener('click', loadRisks);
@@ -1664,6 +1740,178 @@ input[type=text]{background:rgba(255,255,255,.05);border:1px solid var(--line);b
           'это план, открытый на экране.</p>';
       })
       .catch(function (e) { busy(false, '#cmpStatus'); showError(e, 'сравнение стратегий'); });
+  }
+
+  /* ---------------- договоры и обязательства ---------------- */
+  function loadContracts() {
+    busy(true, '#contractsStatus', 'собираю договоры…');
+    $('#contractsBody').textContent = 'считаю…';
+    Promise.all([
+      api('/api/contracts'),
+      api('/api/contracts/obligations', { plan: state.plan, scenario_id: state.scenario })
+    ]).then(function (r) {
+      busy(false, '#contractsStatus');
+      clearError();
+      renderContractCards(r[0]);
+      renderObligations(r[1]);
+    }).catch(function (e) {
+      busy(false, '#contractsStatus');
+      $('#contractsBody').textContent = 'договоры показать не удалось';
+      showError(e, 'договоры');
+    });
+  }
+
+  function renderContractCards(cards) {
+    var fields = [
+      ['counterparty', 'Контрагент'], ['subject', 'Предмет'], ['term', 'Срок'],
+      ['capacity_t_per_year', 'Мощность, т/год', f0], ['price_mln_per_t', 'Цена, млн/т', f1],
+      ['reservation_rate_mln_per_t_year', 'Тариф резерва, млн за т/год', f1],
+      ['take_or_pay_share', 'Take-or-pay', pc], ['lead_time', 'Срок поставки'],
+      ['available_from_year', 'Доступен с года'],
+      ['payment_terms', 'Оплата'], ['liability', 'Ответственность'],
+      ['revision_rule', 'Пересмотр'], ['risk_allocation', 'Распределение рисков'],
+      ['flexibility', 'Гибкость']
+    ];
+    $('#contractsBody').innerHTML = cards.map(function (c) {
+      return '<h3>' + escapeHtml(c.contract_id) + ' · ' + escapeHtml(c.channel) +
+        ' <span class="code soft">' + escapeHtml(c.status) + '</span></h3>' +
+        '<table><tbody>' + fields.map(function (f) {
+          var v = c[f[0]];
+          if (v === null || v === undefined || v === '') return '';
+          return '<tr><td>' + f[1] + '</td><td style="text-align:left;white-space:normal">' +
+            escapeHtml(f[2] ? f[2](v) : String(v)) + '</td></tr>';
+        }).join('') + '</tbody></table>';
+    }).join('') +
+      '<p class="note">Числовые условия каналов приходят из data/supply_sources.csv и не дублируются ' +
+      'в конфигурации договоров: карточка не может разойтись с контрольными данными.</p>';
+  }
+
+  function renderObligations(data) {
+    var t = data.totals || [];
+    $('#obligationsBody').innerHTML = '<h3>Обязательства и их исполнение, сценарий ' +
+      escapeHtml(data.scenario_id) + '</h3>' +
+      '<table><thead><tr><th>Договор</th><th>Законтрактовано, т</th><th>Отобрано, т</th>' +
+      '<th>Загрузка</th><th>Оплачено по ToP, т</th><th>Не отобрано оплаченного, т</th>' +
+      '<th>Платежи, млн</th></tr></thead><tbody>' +
+      t.map(function (r) {
+        return '<tr><td><b>' + escapeHtml(r.contract_id) + '</b> ' + escapeHtml(r.counterparty) + '</td>' +
+          '<td>' + f1(r.contracted_t) + '</td><td>' + f1(r.offtake_t) + '</td>' +
+          '<td>' + (r.utilisation === null ? '—' : pc(r.utilisation)) + '</td>' +
+          '<td>' + f1(r.payable_t) + '</td>' +
+          '<td class="' + (r.unused_paid_t > 0.05 ? 'bad' : '') + '">' + f1(r.unused_paid_t) + '</td>' +
+          '<td>' + f0(r.total_payment_mln) + '</td></tr>';
+      }).join('') + '</tbody></table>' +
+      '<p class="note">Сумма договорных платежей ' + f1(data.reconciliation.contracts_total_mln) +
+      ' млн сходится с закупками и резервом прогона ' +
+      f1(data.reconciliation.run_procurement_and_reservation_mln) + ' млн (без закупки начального запаса).</p>';
+
+    var er = data.emergency_reserve || [];
+    $('#emergencyBody').innerHTML = '<h3>Договорный эквивалент 45-дневного резерва</h3>' +
+      '<table><thead><tr><th>Год</th><th>Требуется, т</th><th>Партия по договору, т</th>' +
+      '<th>Максимум при полной мощности, т</th><th>Нужен запас на ожидание, т</th>' +
+      '<th>Запас на начало, т</th><th>Эквивалент доказан</th></tr></thead><tbody>' +
+      er.map(function (r) {
+        return '<tr><td>' + r.year + '</td><td>' + f1(r.required_reserve_t) + '</td>' +
+          '<td class="' + (r.volume_ok ? 'good' : 'bad') + '">' + f1(r.callable_batch_t) + '</td>' +
+          '<td>' + f1(r.max_batch_at_full_capacity_t) + '</td>' +
+          '<td>' + f1(r.waiting_cover_needed_t) + '</td>' +
+          '<td class="' + (r.waiting_ok ? 'good' : 'bad') + '">' + f1(r.opening_t) + '</td>' +
+          '<td class="' + (r.equivalent ? 'good' : 'bad') + '">' + (r.equivalent ? 'да ✓' : 'нет ✗') +
+          '</td></tr>';
+      }).join('') + '</tbody></table>' +
+      '<p class="note">Срок ожидания берётся в сутках из данных кейса: у аварийного канала это ' +
+      (er.length ? f0(er[0].lead_time_days) : '42') + ' дня. Политика партии: ' +
+      (er.length ? escapeHtml(er[0].batch_policy) : '—') +
+      '. Размер партии задаётся договором через допущение emergency_batch_t, поэтому вариант ' +
+      '«контрактный резерв» проверяется расчётом, а не объявляется невозможным.</p>';
+  }
+
+  /* ---------------- заинтересованные стороны ---------------- */
+  function loadStakeholders() {
+    busy(true, '#stkStatus', 'считаю стороны…');
+    $('#stkBody').textContent = 'считаю…';
+    var body = { plan: state.plan, scenario_ids: ['BASE', 'MANDATORY_STRESS'] };
+    if (!$('#stkRisks').checked) body.risk_scenarios = [];
+    api('/api/stakeholders/impact', body).then(function (data) {
+      busy(false, '#stkStatus');
+      clearError();
+      renderStakeholders(data);
+    }).catch(function (e) {
+      busy(false, '#stkStatus');
+      $('#stkBody').textContent = 'стороны посчитать не удалось';
+      showError(e, 'заинтересованные стороны');
+    });
+  }
+
+  function renderStakeholders(data) {
+    var ids = data.scenario_ids || [];
+    $('#stkBody').innerHTML = data.stakeholders.map(function (st) {
+      var keys = Object.keys(st.scenarios[ids[0]] || {});
+      return '<h3>' + escapeHtml(st.name) + '</h3>' +
+        '<p class="hint">' + escapeHtml(st.role) + '. Получает: ' + escapeHtml(st.gets) +
+        '. Платит: ' + escapeHtml(st.pays) + '. Несёт риск: ' + escapeHtml(st.bears_risk) +
+        '. Требует: ' + escapeHtml(st.requires) + '. Договоры: ' + escapeHtml(st.obligations.join(', ')) + '.</p>' +
+        '<div style="overflow:auto"><table><thead><tr><th>Метрика</th>' +
+        ids.map(function (sid) { return '<th>' + escapeHtml(sid) + '</th>'; }).join('') +
+        '</tr></thead><tbody>' +
+        keys.map(function (k) {
+          var first = st.scenarios[ids[0]][k];
+          return '<tr><td>' + escapeHtml(first.label) + ', ' + escapeHtml(first.unit) + '</td>' +
+            ids.map(function (sid) {
+              var m = st.scenarios[sid][k];
+              if (!m) return '<td>—</td>';
+              var val = m.unit === 'доля' ? pc(m.value) : (Math.abs(m.value) >= 100 ? f0(m.value) : f1(m.value));
+              var delta = m.delta_vs_baseline;
+              var extra = (delta === null || delta === undefined || Math.abs(delta) < 1e-9) ? ''
+                : ' <span style="color:var(--ink-3)">(' + (delta > 0 ? '+' : '') +
+                  (m.unit === 'доля' ? pc(delta) : f1(delta)) + ')</span>';
+              return '<td class="' + (m.worse ? 'bad' : '') + '">' + val + extra +
+                (m.worse ? ' ✗' : '') + '</td>';
+            }).join('') + '</tr>';
+        }).join('') + '</tbody></table></div>';
+    }).join('') +
+      '<p class="note">Ухудшение отмечается по направлению метрики: рост платежей поставщику это ' +
+      'не ухудшение для поставщика, но ухудшение для оператора. Все значения посчитаны тем же ядром, ' +
+      'что и баланс, на одном и том же плане.</p>';
+  }
+
+  /* ---------------- свой сценарий: изменение исходных условий ---------------- */
+  function loadCustomScenario() {
+    var picked = function (id) {
+      return $$('#' + id + ' option').filter(function (o) { return o.selected; })
+                                     .map(function (o) { return o.value; });
+    };
+    var body = {
+      plan: state.plan,
+      base_scenario: state.scenario,
+      label: 'Исследовательский сценарий оператора',
+      demand_multiplier: parseFloat($('#csDemand').value) || 1,
+      price_multiplier: parseFloat($('#csPrice').value) || 1,
+      price_sources: picked('csPriceSources'),
+      delivery_share: parseFloat($('#csDelivery').value),
+      delivery_sources: picked('csDeliverySources'),
+      capacity_multiplier: parseFloat($('#csCapacity').value),
+      capacity_sources: picked('csCapacitySources'),
+      start_year: parseInt($('#csFrom').value, 10),
+      end_year: parseInt($('#csTo').value, 10)
+    };
+    busy(true, '#csStatus', 'считаю свой сценарий…');
+    api('/api/scenario/custom', body).then(function (res) {
+      busy(false, '#csStatus');
+      clearError();
+      var hard = res.violations.filter(function (v) { return v.severity === 'hard'; });
+      $('#csBody').innerHTML = '<div class="kpi" style="grid-template-columns:repeat(3,1fr);margin-top:10px">' +
+        '<div><span>PV сценария, млн</span><b>' + f0(res.totals.discounted_cost_mln) + '</b></div>' +
+        '<div><span>Разница с исходными условиями</span><b class="' +
+          (res.baseline.delta_pv_mln > 0.5 ? 'bad' : '') + '">' + f0(res.baseline.delta_pv_mln) + '</b></div>' +
+        '<div><span>Обслуживание, худший год</span><b class="' +
+          (Math.min.apply(null, res.years.map(function (y) { return y.sl_total; })) < 0.97 ? 'bad' : '') + '">' +
+          pc(Math.min.apply(null, res.years.map(function (y) { return y.sl_total; }))) + '</b></div></div>' +
+        '<ul class="vio" style="margin-top:12px">' + vioList(hard) + '</ul>' +
+        '<p class="note">Изменения: ' + res.changes.map(escapeHtml).join('; ') + '. Статус ' +
+        escapeHtml(res.status) + '. ' + escapeHtml(res.combination_rule) + ' ' +
+        escapeHtml(res.restore) + '.</p>';
+    }).catch(function (e) { busy(false, '#csStatus'); showError(e, 'свой сценарий'); });
   }
 
   /* ---------------- чувствительность ---------------- */

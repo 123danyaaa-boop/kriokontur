@@ -372,6 +372,157 @@ def post_stress_decomposition(body: PlanBody):
     return stress_decomposition(CASE, SCENARIOS, plan)
 
 
+@app.get("/api/contracts")
+def get_contracts():
+    """Карточки договоров: условия кейса из data/*.csv плюс коммерческая рамка команды."""
+    from .contracts import contract_card, load_contracts
+    return [contract_card(CASE, c) for c in load_contracts()]
+
+
+@app.post("/api/contracts/obligations")
+def post_contract_obligations(body: PlanBody):
+    """Договорные обязательства по годам и итоги: сходятся с финансовым блоком прогона."""
+    from .contracts import emergency_reserve_check, load_contracts, obligations, obligations_totals
+    plan = _plan(body.plan)
+    scenario = _scenario(body.scenario_id)
+    res = run_engine(CASE, scenario, plan)
+    contracts = load_contracts()
+    rows = obligations(CASE, res, contracts)
+    totals = obligations_totals(rows)
+    return {
+        "scenario_id": scenario.scenario_id,
+        "rows": rows,
+        "totals": list(totals.values()),
+        "emergency_reserve": [emergency_reserve_check(CASE, plan, y.year, y.demand_total_t, y.opening_t)
+                              for y in res.years],
+        "reconciliation": {
+            "contracts_total_mln": sum(t["total_payment_mln"] for t in totals.values()),
+            "run_procurement_and_reservation_mln": (res.totals["procurement"] + res.totals["reservation"]
+                                                    - sum(y.opening_stock_cost_mln for y in res.years)),
+        },
+    }
+
+
+class StakeholderBody(BaseModel):
+    plan: dict
+    scenario_ids: Optional[List[str]] = None
+    risk_scenarios: Optional[List[str]] = None
+    baseline: str = "BASE"
+
+
+@app.get("/api/stakeholders")
+def get_stakeholders():
+    from dataclasses import asdict as _asdict
+
+    from .stakeholders import load_stakeholders
+    return [_asdict(s) for s in load_stakeholders()]
+
+
+@app.post("/api/stakeholders/impact")
+def post_stakeholder_impact(body: StakeholderBody):
+    """Положение каждой стороны по сценариям и рискам: метрики, разница и ухудшение."""
+    from .stakeholders import impact
+    plan = _plan(body.plan)
+    risks = body.risk_scenarios
+    if risks is None:
+        risks = [sid for sid in SCENARIOS if sid.startswith("TEAM_RISK_")]
+    return impact(CASE, SCENARIOS, plan, None, body.scenario_ids, body.baseline, risks)
+
+
+class CustomScenarioBody(BaseModel):
+    """Редактор исследовательского сценария: изменения исходных условий на копии набора."""
+    plan: dict
+    base_scenario: str = "BASE"
+    label: str = "Исследовательский сценарий команды"
+    demand_multiplier: float = 1.0
+    price_multiplier: float = 1.0
+    price_sources: List[str] = ["A", "B"]
+    delivery_share: float = 1.0
+    delivery_sources: List[str] = []
+    capacity_multiplier: float = 1.0
+    capacity_sources: List[str] = []
+    start_year: int = 2035
+    end_year: int = 2040
+    basis: str = "TEAM_RESEARCH: сценарное допущение команды, статистики нет"
+
+
+@app.post("/api/scenario/custom")
+def post_custom_scenario(body: CustomScenarioBody):
+    """Изменение исходных условий через интерфейс, без правки контрольных данных.
+
+    Работает на копии: строится производный сценарий со статусом TEAM_RESEARCH, контрольные
+    файлы data/*.csv и configs/scenarios/*.yaml не меняются. Возврат к исходным условиям —
+    это просто выбор базового сценария, он назван в ответе.
+    """
+    plan = _plan(body.plan)
+    base = _scenario(body.base_scenario)
+    if body.start_year > body.end_year:
+        raise HTTPException(422, {"message": "интервал задан неверно: начало позже конца",
+                                  "violations": []})
+    years = [y for y in CASE.years if body.start_year <= y <= body.end_year]
+    if not years:
+        raise HTTPException(422, {"message": f"в горизонте {CASE.years[0]}–{CASE.years[-1]} "
+                                             f"нет лет из интервала", "violations": []})
+    changes = []
+    sc = base
+    if abs(body.demand_multiplier - 1.0) > 1e-9:
+        table = dict(sc.demand_multiplier)
+        crit = dict(sc.critical_multiplier)
+        for y in years:
+            table[y] = table.get(y, table.get("default", 1.0)) * body.demand_multiplier
+            crit[y] = crit.get(y, crit.get("default", 1.0)) * body.demand_multiplier
+        sc = sc.derive("TEAM_CUSTOM", body.label, demand_multiplier=table, critical_multiplier=crit)
+        changes.append(f"спрос ×{body.demand_multiplier} в {body.start_year}–{body.end_year}")
+    for component, mult, sources in (("variable_price", body.price_multiplier, body.price_sources),
+                                     ("delivery", body.delivery_share, body.delivery_sources),
+                                     ("capacity", body.capacity_multiplier, body.capacity_sources)):
+        if abs(mult - 1.0) < 1e-9 or not sources:
+            continue
+        unknown = [s for s in sources if s not in CASE.sources]
+        if unknown:
+            raise HTTPException(422, {"message": f"неизвестные каналы: {unknown}", "violations": []})
+        if component == "variable_price":
+            from .risks import geo_event
+            sc = geo_event(CASE, sc, body.label, sources, body.start_year, body.end_year, mult,
+                           "variable_price", "TEAM_CUSTOM", body.basis)
+        elif component == "capacity":
+            from .risks import geo_event
+            sc = geo_event(CASE, sc, body.label, sources, body.start_year, body.end_year, mult,
+                           "capacity", "TEAM_CUSTOM", body.basis)
+        else:
+            table = {k: dict(v) for k, v in sc.delivery_share.items()}
+            for s in sources:
+                name = CASE.sources[s].name
+                cur = table.get(name, {})
+                for y in years:
+                    cur[y] = cur.get(y, cur.get("default", 1.0)) * mult
+                table[name] = cur
+            sc = sc.derive("TEAM_CUSTOM", body.label, delivery_share=table)
+        changes.append(f"{component} каналов {', '.join(sources)} ×{mult} в {body.start_year}–{body.end_year}")
+    if not changes:
+        raise HTTPException(422, {"message": "не задано ни одного изменения исходных условий",
+                                  "violations": []})
+    res = run_engine(CASE, sc, plan)
+    base_res = run_engine(CASE, base, plan)
+    payload = _result_json(res)
+    payload["scenario_id"] = "TEAM_CUSTOM"
+    payload["status"] = "TEAM_RESEARCH"
+    payload["changes"] = changes
+    payload["basis"] = body.basis
+    payload["combination_rule"] = (
+        f"Изменения применяются поверх сценария {body.base_scenario} только к годам "
+        f"{body.start_year}–{body.end_year}; годы, где базовый сценарий уже менял тот же параметр, "
+        f"не затрагиваются, поэтому один эффект не начисляется дважды.")
+    payload["restore"] = f"вернуться к исходным условиям: выбрать сценарий {body.base_scenario}"
+    payload["baseline"] = {
+        "scenario_id": base.scenario_id,
+        "pv_mln": base_res.totals["discounted_cost_mln"],
+        "delta_pv_mln": res.totals["discounted_cost_mln"] - base_res.totals["discounted_cost_mln"],
+        "delta_shortage_t": res.totals["shortage_t"] - base_res.totals["shortage_t"],
+    }
+    return payload
+
+
 @app.post("/api/risks")
 def post_risks(body: RiskBody):
     from .risks import evaluate_risks, load_risks
