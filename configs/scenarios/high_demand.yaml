@@ -1,0 +1,7 @@
+scenario_id: HIGH_DEMAND
+label_ru: "Проверка чувствительности: высокий спрос"
+status: TEAM_SENSITIVITY
+demand_series: high
+notes:
+  - "Колонка high_total_t из data/demand.csv."
+  - "С обязательным стрессом автоматически не объединяется."

@@ -1,0 +1,13 @@
+scenario_id: BASE
+label_ru: "Стандартный сценарий"
+status: CASE_INPUT
+demand_multiplier:
+  default: 1.0
+variable_price_multiplier:
+  default: 1.0
+actual_delivery_share:
+  default: 1.0
+loss_ceiling:
+  enabled: false
+notes:
+  - "BASE does not apply reliability as an automatic delivery multiplier."

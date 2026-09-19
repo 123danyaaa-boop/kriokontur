@@ -1,0 +1,8 @@
+constraint_id,metric,operator,value,unit,period,scenario,severity,status,description
+BASE_CRITICAL_SERVICE,critical_service_level,>=,0.99,share,annual,BASE,hard,CASE_INPUT,"critical demand service minimum"
+BASE_TOTAL_SERVICE,total_service_level,>=,0.97,share,annual,BASE,hard,CASE_INPUT,"total demand service minimum"
+CAPEX_2037,cumulative_capex,<=,1800,mln_units,through_2037,ALL,hard,CASE_INPUT,"CAPEX through end-2037"
+CAPEX_2040,cumulative_capex,<=,2800,mln_units,through_2040,ALL,hard,CASE_INPUT,"total CAPEX through 2040"
+RESERVE_45D,reserve_equivalent_days,>=,45,days,annual,ALL,hard,CASE_INPUT,"physical stock or demonstrably equivalent contracted emergency reserve"
+EMERGENCY_BASE_STREAK,emergency_base_channel_consecutive_years,<=,2,years,2035_2040,ALL,hard,CASE_INPUT,"Emergency cannot serve as the base channel for more than two consecutive years"
+STRESS_LOSS_LIMIT,losses_divided_by_throughput,<=,0.02,share,2038_2040,MANDATORY_STRESS,hard,CASE_INPUT,"applies from 2038 in mandatory stress only"

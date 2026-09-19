@@ -1,0 +1,45 @@
+scenario_id: MANDATORY_STRESS
+label_ru: "Обязательный стрессовый сценарий"
+status: CASE_INPUT
+demand_multiplier:
+  2035: 1.0
+  2036: 1.0
+  2037: 1.0
+  2038: 1.15
+  2039: 1.15
+  2040: 1.15
+critical_demand_multiplier:
+  2035: 1.0
+  2036: 1.0
+  2037: 1.0
+  2038: 1.15
+  2039: 1.15
+  2040: 1.15
+variable_price_multiplier:
+  Earth-Core:
+    2035: 1.0
+    2036: 1.0
+    2037: 1.0
+    2038: 1.25
+    2039: 1.25
+    2040: 1.0
+  Earth-Flex:
+    2035: 1.0
+    2036: 1.0
+    2037: 1.0
+    2038: 1.25
+    2039: 1.25
+    2040: 1.0
+actual_delivery_share:
+  Lunar-ISRU:
+    2038: 0.55
+    2039: 0.75
+    2040: 1.0
+loss_ceiling:
+  enabled: true
+  from_year: 2038
+  max_losses_divided_by_throughput: 0.02
+notes:
+  - "55% and 75% are actual delivery shares and must not be multiplied by reliability again."
+  - "Reservation tariffs, CAPEX and other prices are not changed by the mandatory +25% price shock."
+  - "Mandatory stress is not automatically combined with high-demand or geopolitical research scenarios."

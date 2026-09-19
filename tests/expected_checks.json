@@ -1,0 +1,12 @@
+[
+  {"case_id":"V01","expected":{"closing_inventory_t":13}},
+  {"case_id":"V02","expected":{"served_t":8,"shortage_t":2,"closing_inventory_t":0}},
+  {"case_id":"V03","expected":{"payable_volume_t":70,"variable_payment_mln":140}},
+  {"case_id":"V04","expected":{"variable_payment_mln":140}},
+  {"case_id":"V05","expected":{"reservation_payment_mln":20}},
+  {"case_id":"V06","expected":{"losses_t":1}},
+  {"case_id":"V07","expected":{"reserve_t":45}},
+  {"case_id":"V08","expected":{"violation":"CAPACITY_EXCEEDED","excess_t":2}},
+  {"case_id":"V09","expected":{"total_demand_t":100}},
+  {"case_id":"V10","expected":{"actual_delivery_t":10}}
+]

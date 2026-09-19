@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Криоконтур: рабочее место оператора топливного узла</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&family=Jura:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:#070a11; --panel:rgba(14,20,32,.72); --panel-2:rgba(10,15,25,.9);
+  --line:rgba(190,205,225,.14); --line-2:rgba(190,205,225,.28);
+  --ink:#e9eef5; --ink-2:#9aa8bc; --ink-3:#69748a;
+  --foil:#e0a84e; --foil-ink:#f2d6a4; --foil-soft:rgba(224,168,78,.15);
+  --frost:#9ed3f5; --alarm:#ff5b4d; --ok:#77d6a5;
+  --sA:#6f95ff; --sB:#7fd6c8; --sC:#b39ddb; --sD:#e0a84e; --sE:#ff7a59; --sX:#9ed3f5;
+  --font-display:"Jura","Segoe UI",system-ui,sans-serif;
+  --font-text:"Golos Text",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark}}
+:root[data-theme="dark"]{color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--void);color:var(--ink);font-family:var(--font-text);font-size:14px;-webkit-font-smoothing:antialiased;
+  background-image:radial-gradient(900px 500px at 78% -10%,rgba(60,90,150,.18),transparent 60%),radial-gradient(700px 400px at 5% 110%,rgba(224,168,78,.08),transparent 60%)}
+button,input,select{font-family:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--foil);outline-offset:2px;border-radius:4px}
+a{color:var(--frost)}
+header{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:14px 22px;border-bottom:1px solid var(--line);background:rgba(4,6,11,.75);position:sticky;top:0;z-index:20;backdrop-filter:blur(12px)}
+.brand{font:600 20px/1 var(--font-display);letter-spacing:.03em}
+.brand small{display:block;font:400 11.5px/1.4 var(--font-text);color:var(--ink-2);margin-top:4px;letter-spacing:0}
+.grow{flex:1 1 auto}
+.chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line-2);border-radius:999px;padding:5px 12px;font-size:12px;color:var(--ink-2);background:none;cursor:default}
+.chip b{font-weight:500;color:var(--ink)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+.chip.demo .dot{background:var(--foil)}
+select,input[type=number]{background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:9px;padding:7px 10px;font-size:13px}
+.btn{border:1px solid var(--line-2);background:none;border-radius:999px;padding:7px 14px;font-size:12.5px;color:var(--ink-2);cursor:pointer}
+.btn:hover{color:var(--ink)}
+.btn.on{border-color:rgba(224,168,78,.7);color:var(--foil-ink);background:var(--foil-soft)}
+main{display:grid;grid-template-columns:288px minmax(0,1fr) 300px;gap:16px;padding:16px 22px 40px;align-items:start}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:15px 16px;backdrop-filter:blur(10px)}
+.card h2{font:600 15px/1.2 var(--font-display);margin:0 0 10px}
+.card h3{font-size:12.5px;font-weight:500;margin:14px 0 7px;color:var(--ink)}
+.card h3:first-of-type{margin-top:4px}
+.hint{font-size:11.5px;line-height:1.5;color:var(--ink-2);margin:7px 0 0}
+.tabs{display:flex;gap:2px;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:11px;padding:3px;margin-bottom:14px;flex-wrap:wrap}
+.tabs button{border:0;background:none;border-radius:8px;padding:8px 14px;font-size:13px;color:var(--ink-2);cursor:pointer}
+.tabs button.on{background:rgba(255,255,255,.1);color:var(--ink)}
+.tabs .badge[hidden]{display:none}
+.tabs .badge{display:inline-block;min-width:17px;padding:0 5px;margin-left:7px;border-radius:9px;background:var(--alarm);color:#2b0703;font:600 10.5px/16px var(--font-display);text-align:center}
+table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+th{font-weight:400;color:var(--ink-3);font-size:11.5px;text-align:right;padding:0 7px 7px}
+th:first-child{text-align:left;padding-left:0}
+td{padding:6px 7px;border-top:1px solid var(--line);text-align:right;white-space:nowrap}
+td:first-child{text-align:left;color:var(--ink-2);padding-left:0;white-space:normal}
+td.bad,.bad{color:#ff9c91}
+td.good{color:var(--ok)}
+tr.sum td{border-top:1px solid var(--line-2);font-weight:500;color:var(--ink)}
+.src{display:flex;align-items:center;gap:8px}
+.sw{width:9px;height:9px;border-radius:2px;display:inline-block;flex:0 0 auto}
+.src b{font-weight:500;color:var(--ink)}
+.src span{color:var(--ink-3);font-size:11px}
+input.cell{width:62px;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:7px;padding:5px 7px;font:500 12.5px var(--font-display);text-align:right}
+input.cell:focus{border-color:var(--foil);background:rgba(224,168,78,.08);outline:none}
+input.cell.bad{border-color:var(--alarm);background:rgba(255,91,77,.12)}
+input.cell:disabled{opacity:.55;cursor:not-allowed}
+tr.fact td{border-top:0;padding-top:0;color:var(--ink-3);font-size:11px}
+.seg{display:flex;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:9px;padding:2px;gap:2px;margin-top:5px}
+.seg button{flex:1;border:0;background:none;border-radius:7px;padding:6px 4px;font-size:11.5px;color:var(--ink-2);cursor:pointer}
+.seg button.on{background:var(--foil-soft);color:var(--foil-ink);box-shadow:inset 0 0 0 1px rgba(224,168,78,.4)}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12px;color:var(--ink-2);margin-top:12px}
+.row b{font:600 14px var(--font-display);color:var(--ink)}
+input[type=range]{-webkit-appearance:none;width:100%;height:20px;background:transparent;margin:2px 0 0;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:3px;background:linear-gradient(to right,var(--foil) var(--p,50%),rgba(255,255,255,.15) var(--p,50%))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--ink);border:3px solid var(--foil);margin-top:-5px}
+input[type=range]::-moz-range-thumb{width:8px;height:8px;border:3px solid var(--foil);border-radius:50%;background:var(--ink)}
+.vio{list-style:none;margin:0;padding:0}
+.vio li{display:grid;grid-template-columns:auto 1fr;gap:4px 11px;padding:9px 0;border-top:1px solid var(--line);font-size:12.5px;line-height:1.45}
+.vio li:first-child{border-top:0}
+.code{font:500 11.5px var(--font-display);color:#ff9c91;white-space:nowrap}
+.code.ok{color:var(--ok)}
+.code.soft{color:var(--foil-ink)}
+.bars{display:flex;height:10px;border-radius:3px;overflow:hidden;background:rgba(255,255,255,.05);margin-top:8px}
+.bars i{display:block;height:100%}
+.legend{display:flex;gap:11px;flex-wrap:wrap;font-size:11px;color:var(--ink-2);margin-top:8px}
+.kpi{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:6px}
+.kpi div{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:11px;padding:9px 11px}
+.kpi span{display:block;font-size:11px;color:var(--ink-3)}
+.kpi b{font:600 17px/1.2 var(--font-display)}
+.chart{width:100%;height:210px;display:block}
+.note{font-size:11px;color:var(--ink-3);line-height:1.5;margin-top:10px}
+.loading{color:var(--ink-3);font-size:12px;padding:10px 0}
+@media (max-width:1200px){main{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">Криоконтур<small>рабочее место оператора топливного узла, 2035–2040</small></div>
+  <div class="grow"></div>
+  <span class="chip" id="mode"><i class="dot"></i><span id="modeText">подключаюсь…</span></span>
+  <label class="chip">сценарий <select id="scenario"></select></label>
+  <label class="chip">план <select id="planSel"></select></label>
+  <button class="btn" id="csvBtn">Выгрузить CSV</button>
+</header>
+
+<main>
+  <section class="card" id="decisions">
+    <h2>Решения</h2>
+    <p class="hint">Инвестиции, резерв и ставка. Объёмы по каналам в таблице плана.</p>
+    <div id="invest"></div>
+    <h3>45-дневный резерв</h3>
+    <div class="seg" id="reserveMode">
+      <button data-v="physical">Физический запас</button>
+      <button data-v="contract">Аварийный контракт</button>
+    </div>
+    <div class="row"><span>Ставка дисконтирования</span><b id="rateOut">8,0 %</b></div>
+    <input type="range" id="rate" min="0" max="15" step="0.5" value="8">
+    <p class="hint" id="capexHint"></p>
+  </section>
+
+  <section>
+    <div class="tabs" id="tabs">
+      <button data-tab="plan" class="on">План</button>
+      <button data-tab="balance">Баланс по годам</button>
+      <button data-tab="checks">Проверки<span class="badge" id="vioBadge" hidden>0</span></button>
+      <button data-tab="sens">Чувствительность</button>
+      <button data-tab="horizon">Горизонт за 2040</button>
+    </div>
+
+    <div class="card" id="tab-plan">
+      <h2>План снабжения</h2>
+      <p class="hint">Зарезервированная мощность по каналам, т/год. Серым под строкой фактическая поставка в выбранном сценарии.</p>
+      <div style="overflow:auto;margin-top:12px"><table id="planTable"></table></div>
+      <p class="hint" id="planNote"></p>
+    </div>
+
+    <div class="card" id="tab-balance" hidden>
+      <h2>Баланс по годам</h2>
+      <p class="hint" id="balanceNote"></p>
+      <div style="overflow:auto;margin-top:12px"><table id="yearTable"></table></div>
+      <svg class="chart" id="stockChart" viewBox="0 0 720 210" preserveAspectRatio="none" role="img" aria-label="Запас и спрос по годам"></svg>
+      <p class="note">Синяя линия: запас на конец года. Пунктир: требуемый резерв 45 суток. Столбцы: спрос года.</p>
+    </div>
+
+    <div class="card" id="tab-checks" hidden>
+      <h2>Проверки ограничений</h2>
+      <p class="hint">Код, год, факт, лимит и причина. Формат совпадает со стартовым репозиторием кейса.</p>
+      <h3>BASE</h3><ul class="vio" id="vioBase"></ul>
+      <h3>Обязательный стресс</h3><ul class="vio" id="vioStress"></ul>
+      <h3>Допущения команды</h3><ul class="vio" id="assumptions"></ul>
+    </div>
+
+    <div class="card" id="tab-sens" hidden>
+      <h2>Чувствительность и обратный стресс</h2>
+      <p class="hint">Торнадо: разброс приведённых расходов при отклонении параметра на ±10%. Обратный стресс: при каком значении план впервые нарушает ограничение.</p>
+      <div id="sensBody" class="loading">нажмите «посчитать», расчёт идёт на бэкенде</div>
+      <button class="btn" id="sensBtn" style="margin-top:12px">Посчитать чувствительность</button>
+    </div>
+
+    <div class="card" id="tab-horizon" hidden>
+      <h2>Расчёт на перспективу</h2>
+      <p class="hint" id="horizonBasis"></p>
+      <div class="tabs" id="horizonMethods" style="margin-top:12px">
+        <button data-m="increment" class="on">Рост продолжается</button>
+        <button data-m="saturating">Насыщение</button>
+        <button data-m="plateau">Плато</button>
+      </div>
+      <div id="horizonBody" class="loading">считаю…</div>
+    </div>
+  </section>
+
+  <section class="card" id="totals">
+    <h2>Итог 2035–2040</h2>
+    <p class="hint">Один план в двух контрольных сценариях.</p>
+    <div class="kpi">
+      <div><span>BASE, приведённые</span><b id="kpiBase">—</b></div>
+      <div><span>Стресс, приведённые</span><b id="kpiStress">—</b></div>
+      <div><span>Обслуживание BASE</span><b id="kpiSlBase">—</b></div>
+      <div><span>Обслуживание стресс</span><b id="kpiSlStress">—</b></div>
+    </div>
+    <table id="totalsTable" style="margin-top:14px"></table>
+    <h3>Структура расходов</h3>
+    <div class="bars" id="costBars"></div>
+    <div class="legend" id="costLegend"></div>
+    <p class="note">Деньги в млн условных единиц в постоянных ценах 2035 года. Выручки и стоимости срыва миссии в кейсе нет, поэтому сравниваются расходы.</p>
+  </section>
+</main>
+
+<script src="/web/snapshot.js" onerror="window.__noSnapshot=true"></script>
+<script>
+(function () {
+  'use strict';
+  var $ = function (s) { return document.querySelector(s); };
+  var $$ = function (s) { return Array.prototype.slice.call(document.querySelectorAll(s)); };
+  var nf1 = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  var nf0 = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
+  var f0 = function (v) { return nf0.format(Math.abs(v) < 0.5 ? 0 : v); };
+  var f1 = function (v) { return nf1.format(Math.abs(v) < 0.05 ? 0 : v); };
+  var pc = function (v) { return nf1.format(v * 100) + ' %'; };
+  var COLOR = { A: 'var(--sA)', B: 'var(--sB)', C: 'var(--sC)', D: 'var(--sD)', E: 'var(--sE)', X: 'var(--sX)' };
+  var SNAP = window.SNAPSHOT || null;
+
+  var state = { live: false, case_: null, scenarios: [], plans: {}, planKey: null, plan: null,
+                scenario: 'BASE', runs: {}, tab: 'plan', busy: false };
+
+  function api(path, body) {
+    var opts = body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {};
+    return fetch(path, opts).then(function (r) {
+      if (!r.ok) return r.json().then(function (j) { throw j; });
+      return r.json();
+    });
+  }
+
+  function setMode(live, text) {
+    state.live = live;
+    $('#mode').classList.toggle('demo', !live);
+    $('#modeText').textContent = text;
+    $$('#invest button, #reserveMode button').forEach(function (b) { b.disabled = !live; });
+    $('#rate').disabled = !live;
+    $('#sensBtn').disabled = !live;
+    $('#csvBtn').disabled = !live;
+  }
+
+  /* ---------------- загрузка ---------------- */
+  function boot() {
+    api('/api/case').then(function (c) {
+      state.case_ = c;
+      return Promise.all([api('/api/scenarios'), api('/api/plans/presets')]);
+    }).then(function (r) {
+      state.scenarios = r[0];
+      state.plans = r[1];
+      state.planKey = Object.keys(state.plans)[0];
+      state.plan = JSON.parse(JSON.stringify(state.plans[state.planKey]));
+      setMode(true, 'живой расчёт на бэкенде');
+      buildStatic();
+      recompute();
+    }).catch(function () {
+      if (!SNAP) {
+        setMode(false, 'бэкенд не отвечает и снимка нет');
+        $('#planNote').textContent = 'Запустите бэкенд командой python run.py и обновите страницу.';
+        return;
+      }
+      state.case_ = SNAP.case;
+      state.scenarios = SNAP.scenarios;
+      state.plans = SNAP.plans;
+      state.planKey = Object.keys(SNAP.plans)[0];
+      state.plan = JSON.parse(JSON.stringify(state.plans[state.planKey]));
+      state.runs = SNAP.runs;
+      state.demoPlanKey = state.planKey;
+      setMode(false, 'демо-снимок, расчёт не пересчитывается');
+      buildStatic();
+      render();
+      renderHorizon(SNAP.horizon);
+      renderSens(SNAP.sensitivity);
+    });
+  }
+
+  function buildStatic() {
+    var sel = $('#scenario');
+    sel.innerHTML = state.scenarios.map(function (s) {
+      return '<option value="' + s.scenario_id + '">' + s.scenario_id + '</option>';
+    }).join('');
+    sel.value = state.scenario;
+    sel.addEventListener('change', function () { state.scenario = sel.value; recompute(); });
+
+    var ps = $('#planSel');
+    ps.innerHTML = Object.keys(state.plans).map(function (k) {
+      return '<option value="' + k + '">' + (state.plans[k].name || k) + '</option>';
+    }).join('');
+    ps.value = state.planKey;
+    ps.addEventListener('change', function () {
+      state.planKey = ps.value;
+      state.plan = JSON.parse(JSON.stringify(state.plans[state.planKey]));
+      if (!state.live && state.planKey !== state.demoPlanKey) {
+        $('#planNote').textContent = 'В демо-снимке посчитан только план «' +
+          (state.plans[state.demoPlanKey].name || state.demoPlanKey) + '». Запустите бэкенд, чтобы считать остальные.';
+        $('#planNote').className = 'hint bad';
+        ps.value = state.demoPlanKey;
+        state.planKey = state.demoPlanKey;
+        state.plan = JSON.parse(JSON.stringify(state.plans[state.planKey]));
+        return;
+      }
+      recompute();
+    });
+
+    var inv = [
+      ['ZBO', 'Модернизация хранилища', [null, 2036, 2037, 2038]],
+      ['LUNAR_ISRU', 'Лунное производство', [null, 2035, 2036, 2037]],
+      ['EARTH_NEW_OPTION', 'Опцион нового поставщика', [null, 2035, 2036, 2037]],
+      ['EARTH_NEW_EXERCISE', 'Реализация опциона', [null, 2035, 2036, 2037, 2038]]
+    ];
+    $('#invest').innerHTML = inv.map(function (row) {
+      return '<h3>' + row[1] + '</h3><div class="seg" data-inv="' + row[0] + '">' +
+        row[2].map(function (y) { return '<button data-y="' + y + '">' + (y === null ? 'Нет' : y) + '</button>'; }).join('') +
+        '</div>';
+    }).join('');
+    $$('#invest .seg button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var key = b.parentNode.dataset.inv, y = b.dataset.y === 'null' ? null : +b.dataset.y;
+        var list = state.plan.decisions.investments.filter(function (i) { return i.investment_id !== key; });
+        if (y !== null) list.push({ investment_id: key, decision_year: y });
+        state.plan.decisions.investments = list;
+        recompute();
+      });
+    });
+    $$('#reserveMode button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        state.plan.decisions.inventory_policy.mode = b.dataset.v;
+        recompute();
+      });
+    });
+    $('#rate').addEventListener('input', function (e) {
+      state.plan.assumptions.discount_rate = +e.target.value / 100;
+      $('#rateOut').textContent = nf1.format(+e.target.value) + ' %';
+      e.target.style.setProperty('--p', (+e.target.value / 15 * 100) + '%');
+      recompute();
+    });
+    $$('#tabs button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        state.tab = b.dataset.tab;
+        $$('#tabs button').forEach(function (x) { x.classList.toggle('on', x === b); });
+        ['plan', 'balance', 'checks', 'sens', 'horizon'].forEach(function (t) {
+          $('#tab-' + t).hidden = t !== state.tab;
+        });
+        if (state.tab === 'horizon' && state.live) loadHorizon('increment');
+      });
+    });
+    $$('#horizonMethods button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        $$('#horizonMethods button').forEach(function (x) { x.classList.toggle('on', x === b); });
+        if (state.live) loadHorizon(b.dataset.m);
+        else if (SNAP && SNAP.horizonAll) renderHorizon(SNAP.horizonAll[b.dataset.m]);
+      });
+    });
+    $('#sensBtn').addEventListener('click', loadSens);
+    $('#csvBtn').addEventListener('click', function () {
+      fetch('/api/export/csv', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: state.plan, scenario_id: state.scenario }) })
+        .then(function (r) { return r.text(); })
+        .then(function (text) {
+          var a = document.createElement('a');
+          a.href = URL.createObjectURL(new Blob(['\ufeff' + text], { type: 'text/csv;charset=utf-8' }));
+          a.download = 'kriokontur_' + state.scenario + '.csv';
+          a.click();
+        });
+    });
+  }
+
+  /* ---------------- расчёт ---------------- */
+  function recompute() {
+    if (!state.live) { render(); return; }
+    if (state.busy) return;
+    state.busy = true;
+    var ids = ['BASE', 'MANDATORY_STRESS'];
+    if (ids.indexOf(state.scenario) < 0) ids.push(state.scenario);
+    api('/api/compare', { plan: state.plan, scenario_ids: ids }).then(function (res) {
+      state.runs = res;
+      state.busy = false;
+      render();
+    }).catch(function (err) {
+      state.busy = false;
+      var detail = (err && err.detail) || {};
+      var msg = (detail.violations && detail.violations[0] && detail.violations[0].message) || 'бэкенд вернул ошибку';
+      $('#planNote').textContent = msg;
+      $('#planNote').className = 'hint bad';
+    });
+  }
+
+  /* ---------------- отрисовка ---------------- */
+  function render() {
+    var run = state.runs[state.scenario] || state.runs.BASE;
+    if (!run) return;
+    syncDecisions();
+    renderPlan(run);
+    renderYears(run);
+    renderChecks();
+    renderTotals();
+  }
+
+  function syncDecisions() {
+    var inv = {};
+    state.plan.decisions.investments.forEach(function (i) { inv[i.investment_id] = i.decision_year; });
+    $$('#invest .seg').forEach(function (seg) {
+      var cur = inv[seg.dataset.inv] === undefined ? null : inv[seg.dataset.inv];
+      $$('button', seg).forEach(function (b) {
+        var y = b.dataset.y === 'null' ? null : +b.dataset.y;
+        b.classList.toggle('on', y === cur);
+      });
+    });
+    $$('#reserveMode button').forEach(function (b) {
+      b.classList.toggle('on', b.dataset.v === state.plan.decisions.inventory_policy.mode);
+    });
+    var rate = state.plan.assumptions.discount_rate * 100;
+    $('#rate').value = rate;
+    $('#rate').style.setProperty('--p', (rate / 15 * 100) + '%');
+    $('#rateOut').textContent = nf1.format(rate) + ' %';
+    var capex = 0, capex37 = 0, cost = { ZBO: 180, LUNAR_ISRU: 1250, EARTH_NEW_OPTION: 90, EARTH_NEW_EXERCISE: 270 };
+    state.plan.decisions.investments.forEach(function (i) {
+      var c = cost[i.investment_id] || 0;
+      capex += c;
+      if (i.decision_year <= 2037) capex37 += c;
+    });
+    var over = capex37 > 1800 || capex > 2800;
+    $('#capexHint').innerHTML = 'CAPEX ' + f0(capex) + ' млн, до конца 2037 года ' + f0(capex37) +
+      ' при лимитах 1800 и 2800.' + (over ? ' <b class="bad">лимит превышен</b>' : '');
+  }
+
+  function reservedOf(plan, sid, year) {
+    var row = plan.decisions.capacity_reservations.filter(function (r) {
+      return r.source_id === sid && r.year === year;
+    })[0];
+    return row ? row.reserved_t_per_year : 0;
+  }
+
+  function renderPlan(run) {
+    var years = state.case_.years;
+    var head = '<thead><tr><th>Канал</th>' + years.map(function (y) { return '<th>' + y + '</th>'; }).join('') + '<th>Отбор, т</th></tr></thead>';
+    var body = state.case_.sources.map(function (s) {
+      var total = 0;
+      run.years.forEach(function (y) { total += y.ordered_t[s.source_id] || 0; });
+      var cells = years.map(function (y) {
+        return '<td><input class="cell" data-src="' + s.source_id + '" data-year="' + y + '" value="' +
+          f1(reservedOf(state.plan, s.source_id, y)) + '"' + (state.live ? '' : ' disabled') + '></td>';
+      }).join('');
+      var fact = run.years.map(function (y) {
+        var o = y.ordered_t[s.source_id] || 0, d = y.delivered_t[s.source_id] || 0;
+        return '<td>' + (o > 0.05 ? f0(d) + (Math.abs(d - o) > 0.05 ? ' из ' + f0(o) : '') : '—') + '</td>';
+      }).join('');
+      return '<tr><td><span class="src"><i class="sw" style="background:' + (COLOR[s.source_id] || 'var(--ink-3)') + '"></i>' +
+        '<span><b>' + s.source_id + ' ' + s.name + '</b><br><span>до ' + f0(s.capacity_t_per_year) + ' т/год, ' +
+        f1(s.variable_cost_mln_per_t) + ' млн/т, ToP ' + pc(s.take_or_pay_share) + '</span></span></span></td>' +
+        cells + '<td>' + f0(total) + '</td></tr>' +
+        '<tr class="fact"><td>поставлено</td>' + fact + '<td></td></tr>';
+    }).join('');
+    var dem = '<tr class="sum"><td>Спрос сценария, т</td>' + run.years.map(function (y) {
+      return '<td>' + f0(y.demand_total_t) + '</td>'; }).join('') + '<td></td></tr>';
+    var res = '<tr class="fact"><td>резерв 45 суток, т</td>' + run.years.map(function (y) {
+      return '<td>' + f1(y.reserve_required_t) + '</td>'; }).join('') + '<td></td></tr>';
+    $('#planTable').innerHTML = head + '<tbody>' + body + dem + res + '</tbody>';
+    $$('#planTable input').forEach(function (inp) {
+      inp.addEventListener('change', function () {
+        var v = parseFloat(String(inp.value).replace(',', '.'));
+        if (isNaN(v) || v < 0) { inp.classList.add('bad'); $('#planNote').textContent = 'Введите число не меньше нуля.'; return; }
+        inp.classList.remove('bad');
+        var list = state.plan.decisions.capacity_reservations.filter(function (r) {
+          return !(r.source_id === inp.dataset.src && r.year === +inp.dataset.year); });
+        list.push({ source_id: inp.dataset.src, year: +inp.dataset.year, reserved_t_per_year: Math.round(v * 10) / 10 });
+        state.plan.decisions.capacity_reservations = list;
+        $('#planNote').textContent = '';
+        $('#planNote').className = 'hint';
+        recompute();
+      });
+    });
+    var sc = state.scenarios.filter(function (s) { return s.scenario_id === state.scenario; })[0];
+    $('#planNote').textContent = sc ? sc.label + '. ' + (sc.notes || []).join(' ') : '';
+    $('#planNote').className = 'hint';
+  }
+
+  function renderYears(run) {
+    var rows = [
+      ['Спрос, т', function (y) { return f0(y.demand_total_t); }],
+      ['Критический, т', function (y) { return f0(y.demand_critical_t); }],
+      ['Поставка, т', function (y) { return f0(y.gross_t); }],
+      ['Потери, т', function (y) { return f1(y.losses_t); }],
+      ['Выдано, т', function (y) { return f0(y.served_t); }],
+      ['Дефицит, т', function (y) { return f1(y.shortage_t); }, function (y) { return y.shortage_t > 0.05 ? 'bad' : ''; }],
+      ['Запас на конец, т', function (y) { return f1(y.closing_t); }],
+      ['Обслуживание общее', function (y) { return pc(y.sl_total); }, function (y) { return y.sl_total < 0.97 ? 'bad' : 'good'; }],
+      ['Обслуживание критическое', function (y) { return pc(y.sl_critical); }, function (y) { return y.sl_critical < 0.99 ? 'bad' : 'good'; }],
+      ['Расходы года, млн', function (y) { return f0(y.total_cost_mln); }],
+      ['в том числе CAPEX', function (y) { return f0(y.cost.capex); }]
+    ];
+    $('#yearTable').innerHTML = '<thead><tr><th>Показатель</th>' +
+      run.years.map(function (y) { return '<th>' + y.year + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      rows.map(function (r) {
+        return '<tr><td>' + r[0] + '</td>' + run.years.map(function (y) {
+          return '<td class="' + (r[2] ? r[2](y) : '') + '">' + r[1](y) + '</td>'; }).join('') + '</tr>';
+      }).join('') + '</tbody>';
+    $('#balanceNote').textContent = 'Сценарий ' + run.scenario_id + '. Материальный баланс: запас на конец равен запасу на начало плюс поставка минус потери минус выдача.';
+    drawStock(run);
+  }
+
+  function drawStock(run) {
+    var W = 720, H = 210, L = 44, R = 12, T = 14, B = 26;
+    var maxD = Math.max.apply(null, run.years.map(function (y) { return y.demand_total_t; }));
+    var maxS = Math.max.apply(null, run.years.map(function (y) { return Math.max(y.closing_t, y.reserve_required_t); }));
+    var n = run.years.length;
+    var bw = (W - L - R) / n * 0.55;
+    var x = function (i) { return L + (W - L - R) * (i + 0.5) / n; };
+    var yD = function (v) { return H - B - (v / maxD) * (H - T - B) * 0.9; };
+    var yS = function (v) { return H - B - (v / (maxS * 1.2)) * (H - T - B) * 0.9; };
+    var out = '';
+    run.years.forEach(function (y, i) {
+      out += '<rect x="' + (x(i) - bw / 2) + '" y="' + yD(y.demand_total_t) + '" width="' + bw +
+        '" height="' + (H - B - yD(y.demand_total_t)) + '" fill="rgba(111,149,255,.22)"/>' +
+        '<text x="' + x(i) + '" y="' + (H - 8) + '" fill="var(--ink-3)" font-size="10" text-anchor="middle">' + y.year + '</text>';
+      if (y.shortage_t > 0.05) out += '<rect x="' + (x(i) - bw / 2) + '" y="' + (H - B - 6) + '" width="' + bw + '" height="6" fill="var(--alarm)"/>';
+    });
+    var line = function (fn, color, dash) {
+      var d = run.years.map(function (y, i) { return (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + yS(fn(y)).toFixed(1); }).join('');
+      return '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="1.8"' + (dash ? ' stroke-dasharray="4 4"' : '') + '/>';
+    };
+    out += line(function (y) { return y.reserve_required_t; }, 'rgba(233,238,245,.45)', true);
+    out += line(function (y) { return y.closing_t; }, 'var(--frost)');
+    out += '<text x="6" y="' + (T + 8) + '" fill="var(--ink-3)" font-size="10">т</text>';
+    $('#stockChart').innerHTML = out;
+  }
+
+  function vioList(list) {
+    if (!list || !list.length) return '<li><span class="code ok">OK</span><span>Нарушений не найдено.</span></li>';
+    return list.map(function (v) {
+      return '<li><span class="code' + (v.severity !== 'hard' ? ' soft' : '') + '">' + v.code + '</span><span>' +
+        v.message.replace(v.code + ' ', '') + '</span></li>';
+    }).join('');
+  }
+
+  function renderChecks() {
+    var b = state.runs.BASE, s = state.runs.MANDATORY_STRESS;
+    $('#vioBase').innerHTML = vioList(b && b.violations);
+    $('#vioStress').innerHTML = vioList(s && s.violations);
+    var n = ((b && b.violations.filter(function (v) { return v.severity === 'hard'; }).length) || 0) +
+            ((s && s.violations.filter(function (v) { return v.severity === 'hard'; }).length) || 0);
+    $('#vioBadge').hidden = n === 0;
+    $('#vioBadge').textContent = n;
+    var a = (b && b.assumptions) || {};
+    $('#assumptions').innerHTML = Object.keys(a).map(function (k) {
+      return '<li><span class="code soft">' + k + '</span><span>' + a[k] + '</span></li>';
+    }).join('');
+  }
+
+  function renderTotals() {
+    var b = state.runs.BASE, s = state.runs.MANDATORY_STRESS;
+    if (!b || !s) return;
+    $('#kpiBase').textContent = f0(b.totals.discounted_cost_mln);
+    $('#kpiStress').textContent = f0(s.totals.discounted_cost_mln);
+    $('#kpiSlBase').textContent = pc(b.totals.sl_total);
+    $('#kpiSlStress').textContent = pc(s.totals.sl_total);
+    $('#kpiSlBase').className = b.totals.sl_total < 0.97 ? 'bad' : '';
+    $('#kpiSlStress').className = s.totals.sl_total < 0.97 ? 'bad' : '';
+    var rows = [
+      ['Все расходы, млн', 'total_cost_mln', f0],
+      ['Расход на тонну, млн', 'cost_per_served_t', f1],
+      ['Дефицит, т', 'shortage_t', f1],
+      ['Потери, т', 'losses_t', f1],
+      ['Обслужен критический', 'sl_critical', pc]
+    ];
+    $('#totalsTable').innerHTML = '<thead><tr><th></th><th>BASE</th><th>Стресс</th></tr></thead><tbody>' +
+      rows.map(function (r) {
+        return '<tr><td>' + r[0] + '</td><td>' + r[2](b.totals[r[1]]) + '</td><td>' + r[2](s.totals[r[1]]) + '</td></tr>';
+      }).join('') + '</tbody>';
+    var run = state.runs[state.scenario] || b;
+    var parts = [['procurement', 'закупки', 'var(--frost)'], ['reservation', 'резерв мощности', 'var(--sC)'],
+                 ['holding', 'хранение', 'var(--sB)'], ['fixed_opex', 'OPEX', '#8aa0c2'], ['capex', 'CAPEX', 'var(--foil)']];
+    var total = run.totals.total_cost_mln;
+    $('#costBars').innerHTML = parts.map(function (p) {
+      return '<i style="width:' + (run.totals[p[0]] / total * 100).toFixed(1) + '%;background:' + p[2] + '"></i>';
+    }).join('');
+    $('#costLegend').innerHTML = parts.map(function (p) {
+      return '<span><i class="sw" style="background:' + p[2] + '"></i> ' + p[1] + ' ' + f0(run.totals[p[0]]) + '</span>';
+    }).join('');
+  }
+
+  /* ---------------- чувствительность ---------------- */
+  function loadSens() {
+    $('#sensBody').textContent = 'считаю…';
+    Promise.all([
+      api('/api/sensitivity/tornado', { plan: state.plan, scenario_id: 'BASE' }),
+      api('/api/sensitivity/reverse', { plan: state.plan, scenario_id: 'BASE' })
+    ]).then(function (r) { renderSens({ tornado: r[0], reverse: r[1] }); })
+      .catch(function () { $('#sensBody').textContent = 'бэкенд не ответил'; });
+  }
+
+  function renderSens(data) {
+    if (!data) return;
+    var maxSwing = Math.max.apply(null, data.tornado.map(function (r) { return r.swing; })) || 1;
+    var t = '<table><thead><tr><th>Параметр</th><th>PV низ</th><th>PV верх</th><th>Размах</th><th>Ломает план</th></tr></thead><tbody>' +
+      data.tornado.map(function (r) {
+        return '<tr><td>' + r.label + '<div class="bars" style="height:5px;margin-top:5px"><i style="width:' +
+          (r.swing / maxSwing * 100).toFixed(0) + '%;background:var(--foil)"></i></div></td><td>' +
+          f0(r.pv_low) + '</td><td>' + f0(r.pv_high) + '</td><td>' + f0(r.swing) + '</td><td class="' +
+          (r.breaks_plan ? 'bad' : 'good') + '">' + (r.breaks_plan ? 'да' : 'нет') + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    var rev = '<h3>Обратный стресс</h3><table><thead><tr><th>Параметр</th><th>Порог</th><th>Первое нарушение</th></tr></thead><tbody>' +
+      data.reverse.map(function (r) {
+        return '<tr><td>' + r.label + '</td><td>' + (r.boundary === null ? 'держится' : f1(r.boundary) + ' ' + r.unit) +
+          '</td><td class="' + (r.boundary === null ? 'good' : 'bad') + '">' + (r.first_violation || 'нет') + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    $('#sensBody').innerHTML = t + rev;
+  }
+
+  /* ---------------- горизонт ---------------- */
+  function loadHorizon(method) {
+    $('#horizonBody').textContent = 'считаю…';
+    api('/api/horizon', { method: method, rate: state.plan.assumptions.discount_rate })
+      .then(renderHorizon)
+      .catch(function () { $('#horizonBody').textContent = 'бэкенд не ответил'; });
+  }
+
+  function renderHorizon(h) {
+    if (!h) return;
+    $('#horizonBasis').textContent = 'Горизонт до ' + h.last_year + ' года. Способ продления спроса: ' + h.basis +
+      ' Всё за 2040 годом это допущения команды, а не данные организатора.';
+    var years = Object.keys(h.demand).sort();
+    var demand = '<table><thead><tr><th>год</th>' + years.map(function (y) { return '<th>' + y + '</th>'; }).join('') +
+      '</tr></thead><tbody><tr><td>спрос, т/год</td>' + years.map(function (y) {
+        return '<td class="' + (h.demand[y] > h.earth_ceiling ? 'bad' : '') + '">' + f0(h.demand[y]) + '</td>'; }).join('') +
+      '</tr></tbody></table>';
+    var ceil = '<p class="hint">Потолок земных каналов ' + f0(h.earth_ceiling) + ' т/год. Первый год, где его не хватает: <b class="bad">' +
+      (h.first_infeasible_year || 'нет в горизонте') + '</b>.</p>';
+    var arch = '<h3>Архитектуры</h3><table><thead><tr><th>вариант</th><th>PV 2040</th><th>PV ' + h.last_year +
+      '</th><th>обслужено, т</th><th>дефицит, т</th><th>млн/т</th><th>дефицит с года</th></tr></thead><tbody>' +
+      h.architectures.map(function (a) {
+        return '<tr><td>' + a.label + '</td><td>' + f0(a.pv_2040) + '</td><td>' + f0(a.pv_last) + '</td><td>' +
+          f0(a.served_t) + '</td><td class="' + (a.shortage_t > 1 ? 'bad' : 'good') + '">' + f1(a.shortage_t) +
+          '</td><td>' + f1(a.cost_per_t) + '</td><td>' + (a.first_deficit_year || 'нет') + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    var pay = '<h3>Год перелома</h3><table><tbody>' +
+      [['isru1_vs_earth2', 'Луна первой очереди против второго земного поставщика'],
+       ['isru2_vs_earth2', 'Две очереди Луны против второго земного поставщика'],
+       ['isru2_vs_isru1', 'Вторая очередь Луны против первой']].map(function (p) {
+        return '<tr><td>' + p[1] + '</td><td>' + (h.payback[p[0]] || 'не окупается') + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    var notes = '<p class="note">' + (h.notes || []).join('<br>') + '</p>';
+    $('#horizonBody').innerHTML = demand + ceil + arch + pay + notes;
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>

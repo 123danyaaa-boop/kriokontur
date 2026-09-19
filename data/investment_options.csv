@@ -1,0 +1,4 @@
+investment_id,name,option_fee_mln,exercise_cost_mln,total_capex_mln,commissioning_rule,fixed_opex_mln_per_year,status,notes
+EARTH_NEW,Earth-New option,90,270,360,"18-24 months after exercise/preparation decision",0,CASE_INPUT,"do not add another 360 on top of 90+270"
+LUNAR_ISRU,Lunar-ISRU pilot,0,1250,1250,"must be financed before 2038; available from 2038",70,CASE_INPUT,"capacity effect is defined in supply_sources.csv"
+ZBO,ZBO modernization,0,180,180,"option available from 2036",12,CASE_INPUT,"capacity becomes 120 t; loss rate becomes 1.2% of throughput"

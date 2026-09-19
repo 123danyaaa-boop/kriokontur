@@ -1,0 +1,9 @@
+scenario_id: TEAM_RISK_EARTH_NEW_DELAY
+label_ru: "Риск: подготовка нового поставщика идёт по верхней границе"
+status: TEAM_RESEARCH
+base_scenario: BASE
+commissioning_delay_months:
+  Earth-New: 6
+combination_rule: "Меняется только срок ввода Earth-New: 24 месяца вместо 18. Спрос, цены и доли поставки как в BASE."
+notes:
+  - "Основание: кейс задаёт lead time Earth-New интервалом 18–24 месяца, нижняя граница это наше допущение."

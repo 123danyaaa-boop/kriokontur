@@ -1,0 +1,7 @@
+scenario_id: LOW_DEMAND
+label_ru: "Проверка чувствительности: низкий спрос"
+status: TEAM_SENSITIVITY
+demand_series: low
+notes:
+  - "Колонка low_total_t из data/demand.csv. Доля критического спроса сохраняется от базового года."
+  - "Это sensitivity check организатора, а не замена обязательного стресса."

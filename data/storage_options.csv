@@ -1,0 +1,3 @@
+storage_id,name,capacity_t,loss_rate_on_throughput,holding_cost_mln_per_t_year,capex_mln,fixed_opex_mln_per_year,available_from_year,status,notes
+BASE,Base storage,70,0.045,0.72,0,0,2035,CASE_INPUT,"existing storage"
+ZBO,ZBO modernization,120,0.012,0.72,180,12,2036,CASE_INPUT,"case-model coefficient; not a universal real ZBO performance claim"

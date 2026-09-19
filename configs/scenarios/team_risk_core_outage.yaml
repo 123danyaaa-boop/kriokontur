@@ -1,0 +1,12 @@
+scenario_id: TEAM_RISK_CORE_OUTAGE
+label_ru: "Риск: базовый земной канал стоит половину 2037 года"
+status: TEAM_RESEARCH
+base_scenario: BASE
+capacity_multiplier:
+  Earth-Core:
+    2037: 0.5
+combination_rule: >
+  Доступная мощность Earth-Core в 2037 году уменьшена вдвое. Обязательство take-or-pay при этом
+  не снимается: платим за минимальный объём договора, даже если отобрать его не смогли.
+notes:
+  - "Показывает цену жёсткого контракта при срыве у поставщика."
