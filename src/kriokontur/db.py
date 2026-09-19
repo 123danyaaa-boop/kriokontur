@@ -70,8 +70,14 @@ def sync_scenarios(conn: sqlite3.Connection, scenarios: dict, scen_dir: Path) ->
     conn.commit()
 
 
-def save_plan(conn: sqlite3.Connection, plan: Plan, author: str = "команда") -> str:
-    envelope = json.dumps(plan.to_envelope(), ensure_ascii=False)
+def save_plan(conn: sqlite3.Connection, plan: Plan, scenario_id: str = "BASE",
+              author: str = "команда") -> str:
+    """Сохраняет план вместе со сценарием, под которым он построен.
+
+    Сценарий хранится прямо в переносимом конверте: иначе открытый план молча считается
+    в BASE, даже если он собирался под обязательный стресс.
+    """
+    envelope = json.dumps(plan.to_envelope(scenario_id), ensure_ascii=False)
     conn.execute("""INSERT INTO plan(plan_id, name, author, created_at, updated_at, envelope)
                     VALUES (?,?,?,?,?,?)
                     ON CONFLICT(plan_id) DO UPDATE SET name=excluded.name, updated_at=excluded.updated_at,
@@ -101,8 +107,23 @@ def load_plan(conn: sqlite3.Connection, plan_id: str) -> Optional[Plan]:
     return Plan.from_envelope(json.loads(row["envelope"])) if row else None
 
 
+def load_envelope(conn: sqlite3.Connection, plan_id: str) -> Optional[dict]:
+    """Конверт как он сохранён: с именем и сценарием, под которым план строился."""
+    row = conn.execute("SELECT envelope FROM plan WHERE plan_id=?", (plan_id,)).fetchone()
+    return json.loads(row["envelope"]) if row else None
+
+
 def list_plans(conn: sqlite3.Connection) -> List[dict]:
-    return [dict(r) for r in conn.execute("SELECT plan_id, name, author, updated_at FROM plan ORDER BY updated_at DESC")]
+    rows = []
+    for r in conn.execute("SELECT plan_id, name, author, updated_at, envelope FROM plan "
+                          "ORDER BY updated_at DESC"):
+        item = {k: r[k] for k in ("plan_id", "name", "author", "updated_at")}
+        try:
+            item["scenario_id"] = json.loads(r["envelope"]).get("scenario_id", "BASE")
+        except (ValueError, TypeError):
+            item["scenario_id"] = "BASE"
+        rows.append(item)
+    return rows
 
 
 def save_run(conn: sqlite3.Connection, res: RunResult, case: CaseInput) -> str:

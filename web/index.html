@@ -165,6 +165,9 @@ model-viewer{width:100%;height:min(60vh,520px);min-height:280px;border-radius:12
 .tl-caption.show{display:flex}
 .tl-caption.alarm{border-color:rgba(255,91,77,.55);background:rgba(255,91,77,.12)}
 .tl-caption b{font:600 12.5px var(--font-display)}
+/* нарушение читается не только цветом: рядом с числом стоит значок */
+.flag{margin-left:5px;font-size:11px;opacity:.85}
+input[type=text]{background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:9px;padding:5px 9px;font-size:12.5px;max-width:170px}
 @media (max-width:1200px){main{grid-template-columns:minmax(0,1fr)}.banners{position:static}}
 @media (max-width:560px){
   header{padding:12px 14px;gap:10px}
@@ -234,6 +237,7 @@ model-viewer{width:100%;height:min(60vh,520px);min-height:280px;border-radius:12
       <button data-tab="plan" class="on">План</button>
       <button data-tab="node">Узел</button>
       <button data-tab="balance">Баланс по годам</button>
+      <button data-tab="compare">Сравнение</button>
       <button data-tab="checks">Проверки<span class="badge" id="vioBadge" hidden>0</span></button>
       <button data-tab="sens">Чувствительность</button>
       <button data-tab="risks">Риски</button>
@@ -248,13 +252,21 @@ model-viewer{width:100%;height:min(60vh,520px);min-height:280px;border-radius:12
       <div class="toolbar">
         <button class="btn" id="autoplanBtn">Автоплан</button>
         <button class="btn" id="resetBtn">Сбросить к пресету</button>
+        <label class="chip">имя плана <input type="text" id="planNameInput" placeholder="как назвать сохранение"></label>
         <button class="btn" id="saveBtn">Сохранить план</button>
         <label class="chip">сохранённые <select id="savedSel"></select></label>
         <button class="btn" id="openBtn">Открыть сохранённый</button>
+        <button class="btn" id="importBtn">Импорт JSON</button>
+        <button class="btn" id="downloadPlanBtn">Скачать план</button>
+        <input type="file" id="importFile" accept=".json,application/json" hidden>
         <span class="sp"></span>
         <span class="status" id="planSay"></span>
         <span class="status" id="planStatus"></span>
       </div>
+      <h3 style="margin-top:16px">Договорные обязательства года</h3>
+      <p class="hint">Законтрактованный объём, фактический отбор, оплаченный по take-or-pay минимум
+        и объём, который оплачен, но не отобран. Здесь же видно, когда и зачем вызывался аварийный канал.</p>
+      <div style="overflow:auto;margin-top:8px"><table id="contractTable"></table></div>
     </div>
 
     <div class="card" id="tab-node" hidden>
@@ -290,6 +302,22 @@ model-viewer{width:100%;height:min(60vh,520px);min-height:280px;border-radius:12
         <span class="status" id="tlStatus"></span>
       </div>
       <div class="tl-caption" id="tlCaption"><b id="tlCapTitle"></b><span id="tlCapText"></span></div>
+    </div>
+
+    <div class="card" id="tab-compare" hidden>
+      <h2>Сравнение сценариев и стратегий</h2>
+      <p class="hint">Один и тот же план в контрольных и проверочных сценариях, разложение эффекта
+        обязательного стресса и готовые планы команды на единой базе. Все числа считает то же ядро,
+        что и остальные вкладки, поэтому они совпадают с выгрузкой.</p>
+      <div class="toolbar">
+        <button class="btn" id="cmpBtn">Посчитать сравнение</button>
+        <button class="btn" id="stratBtn">Сравнить стратегии</button>
+        <span class="sp"></span>
+        <span class="status" id="cmpStatus"></span>
+      </div>
+      <div id="cmpBody" class="loading">нажмите «посчитать сравнение», расчёт идёт на бэкенде</div>
+      <div id="decompBody"></div>
+      <div id="stratBody"></div>
     </div>
 
     <div class="card" id="tab-checks" hidden>
@@ -358,7 +386,11 @@ model-viewer{width:100%;height:min(60vh,520px);min-height:280px;border-radius:12
       <div><span data-i18n="kpi.slBase">Обслуживание BASE</span><b id="kpiSlBase">—</b></div>
       <div><span data-i18n="kpi.slStress">Обслуживание стресс</span><b id="kpiSlStress">—</b></div>
     </div>
+    <p class="note" id="kpiWorstNote">Обслуживание показано по худшему году: ограничение кейса
+      проверяется ежегодно, среднее за горизонт скрывает провал отдельного года.</p>
     <table id="totalsTable" style="margin-top:14px"></table>
+    <h3>Реестр KPI, сценарий на экране</h3>
+    <table id="kpiTable"></table>
     <h3 data-i18n="h.costStructure">Структура расходов</h3>
     <div class="bars" id="costBars"></div>
     <div class="legend" id="costLegend"></div>
@@ -400,10 +432,16 @@ model-viewer{width:100%;height:min(60vh,520px);min-height:280px;border-radius:12
       'year.metric': 'Показатель', 'year.demand': 'Спрос, т', 'year.critical': 'Критический, т',
       'year.supply': 'Поставка, т', 'year.losses': 'Потери, т', 'year.served': 'Выдано, т',
       'year.shortage': 'Дефицит, т', 'year.closing': 'Запас на конец, т',
+      'year.opening': 'Запас на начало, т', 'year.reserveReq': 'Требуемый резерв 45 суток, т',
+      'year.capacity': 'Ёмкость хранилища, т', 'year.contracted': 'Законтрактовано, т',
+      'year.overflow': 'Перелив, т', 'year.emergency': 'Доля аварийного канала',
+      'year.unusedPaid': 'Оплачено, но не отобрано, т',
       'year.slTotal': 'Обслуживание общее', 'year.slCritical': 'Обслуживание критическое',
       'year.cost': 'Расходы года, млн', 'year.capex': 'в том числе CAPEX',
       'tot.rowCost': 'Все расходы, млн', 'tot.rowPerT': 'Расход на тонну, млн',
       'tot.rowShortage': 'Дефицит, т', 'tot.rowLosses': 'Потери, т', 'tot.rowSlCrit': 'Обслужен критический',
+      'tot.rowStockMin': 'Минимальный запас, т', 'tot.rowReserveMargin': 'Запас над резервом, т',
+      'tot.rowUnusedPaid': 'Оплачено, но не отобрано, т',
       'tot.base': 'BASE', 'tot.stress': 'Стресс',
       'cost.procurement': 'закупки', 'cost.reservation': 'резерв мощности', 'cost.holding': 'хранение',
       'cost.opex': 'OPEX', 'cost.capex': 'CAPEX'
@@ -421,16 +459,28 @@ model-viewer{width:100%;height:min(60vh,520px);min-height:280px;border-radius:12
       'year.metric': 'Metric', 'year.demand': 'Demand, t', 'year.critical': 'Critical, t',
       'year.supply': 'Supply, t', 'year.losses': 'Losses, t', 'year.served': 'Served, t',
       'year.shortage': 'Shortage, t', 'year.closing': 'Closing stock, t',
+      'year.opening': 'Opening stock, t', 'year.reserveReq': '45-day reserve required, t',
+      'year.capacity': 'Storage capacity, t', 'year.contracted': 'Contracted, t',
+      'year.overflow': 'Overflow, t', 'year.emergency': 'Emergency share',
+      'year.unusedPaid': 'Paid but not taken, t',
       'year.slTotal': 'Total service level', 'year.slCritical': 'Critical service level',
       'year.cost': 'Year cost, mln', 'year.capex': 'of which CAPEX',
       'tot.rowCost': 'Total cost, mln', 'tot.rowPerT': 'Cost per t, mln',
       'tot.rowShortage': 'Shortage, t', 'tot.rowLosses': 'Losses, t', 'tot.rowSlCrit': 'Critical served',
+      'tot.rowStockMin': 'Minimum stock, t', 'tot.rowReserveMargin': 'Margin over reserve, t',
+      'tot.rowUnusedPaid': 'Paid but not taken, t',
       'tot.base': 'BASE', 'tot.stress': 'Stress',
       'cost.procurement': 'procurement', 'cost.reservation': 'capacity reservation', 'cost.holding': 'holding',
       'cost.opex': 'OPEX', 'cost.capex': 'CAPEX'
     }
   };
   function tr(key) { return (I18N[state.lang] && I18N[state.lang][key]) || I18N.ru[key] || key; }
+  /* сумма значений словаря «канал → число»: движок отдаёт их по каналам, а таблица показывает год */
+  function sumOf(obj) {
+    var total = 0;
+    Object.keys(obj || {}).forEach(function (k) { total += obj[k] || 0; });
+    return total;
+  }
   function applyI18n() { $$('[data-i18n]').forEach(function (el) { el.textContent = tr(el.dataset.i18n); }); }
 
   /* Причина, которую видит пользователь на каждом отключённом элементе.
@@ -523,6 +573,7 @@ model-viewer{width:100%;height:min(60vh,520px);min-height:280px;border-radius:12
   function liveOnly() {
     return $$('#invest button, #reserveMode button, #rate, #sensBtn, #csvBtn, #xlsxBtn, ' +
               '#autoplanBtn, #saveBtn, #openBtn, #resetBtn, #savedSel, #risksBtn, #mcBtn, #mcTrials, ' +
+              '#cmpBtn, #stratBtn, #importBtn, #planNameInput, ' +
               '#geoBtn, #geoResetBtn, #geoSources, #geoFrom, #geoTo, #geoMult, #planTable input');
   }
 
@@ -798,7 +849,7 @@ model-viewer{width:100%;height:min(60vh,520px);min-height:280px;border-radius:12
       b.addEventListener('click', function () {
         state.tab = b.dataset.tab;
         $$('#tabs button').forEach(function (x) { x.classList.toggle('on', x === b); });
-        ['plan', 'node', 'balance', 'checks', 'sens', 'risks', 'horizon'].forEach(function (t) {
+        ['plan', 'node', 'balance', 'compare', 'checks', 'sens', 'risks', 'horizon'].forEach(function (t) {
           $('#tab-' + t).hidden = t !== state.tab;
         });
         if (state.tab === 'horizon' && state.live) loadHorizon('increment');
@@ -863,12 +914,17 @@ model-viewer{width:100%;height:min(60vh,520px);min-height:280px;border-radius:12
     });
 
     $('#saveBtn').addEventListener('click', function () {
+      // имя и сценарий сохраняются вместе с планом: открытый план считается тем же сценарием
+      var name = String($('#planNameInput').value || '').trim();
+      var body = { plan: state.plan, scenario_id: state.scenario };
+      if (name) { body.name = name; body.plan_id = name; }
       busy(true, '#planStatus', 'сохраняю…');
-      api('/api/plans', { plan: state.plan, scenario_id: state.scenario })
+      api('/api/plans', body)
         .then(function (r) {
           busy(false, '#planStatus');
           clearError();
-          say('План сохранён в базе, идентификатор ' + r.plan_id);
+          say('План «' + (r.name || r.plan_id) + '» сохранён под идентификатором ' + r.plan_id +
+              ' вместе со сценарием ' + r.scenario_id + '.');
           return refreshSaved(r.plan_id);
         })
         .catch(function (e) { busy(false, '#planStatus'); showError(e, 'сохранение плана'); });
@@ -882,15 +938,50 @@ model-viewer{width:100%;height:min(60vh,520px);min-height:280px;border-radius:12
         .then(function (envelope) {
           busy(false, '#planStatus');
           clearError();
-          state.plan = envelope;
-          state.planKey = '__saved__';
-          state.plans.__saved__ = clone(envelope);
-          fillPlans();
-          say('Открыт сохранённый план ' + id);
-          recompute();
+          openEnvelope(envelope, 'Открыт сохранённый план ' + id);
         })
         .catch(function (e) { busy(false, '#planStatus'); showError(e, 'открытие плана'); });
     });
+
+    /* --- перенос плана файлом: импорт и выгрузка конверта --- */
+    $('#importBtn').addEventListener('click', function () { $('#importFile').click(); });
+    $('#importFile').addEventListener('change', function (e) {
+      var file = e.target.files && e.target.files[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        var envelope;
+        try {
+          envelope = JSON.parse(String(reader.result));
+        } catch (err) {
+          note('Файл не разобран как JSON: ' + err.message, true);
+          return;
+        }
+        openEnvelope(envelope, 'Импортирован план из файла ' + file.name +
+          '. Проверка входа идёт на бэкенде: ошибки покажет плашка.');
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    });
+
+    $('#downloadPlanBtn').addEventListener('click', function () {
+      var envelope = clone(state.plan);
+      envelope.scenario_id = state.scenario;
+      var name = String($('#planNameInput').value || '').trim();
+      if (name) { envelope.name = name; envelope.plan_id = name; }
+      var blob = new Blob([JSON.stringify(envelope, null, 2)], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = (envelope.plan_id || 'plan') + '.json';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+      say('Конверт плана выгружен файлом: его можно открыть кнопкой «Импорт JSON» или передать жюри.');
+    });
+
+    /* --- сравнение сценариев и стратегий --- */
+    $('#cmpBtn').addEventListener('click', loadComparison);
+    $('#stratBtn').addEventListener('click', loadStrategies);
 
     /* --- риски, Монте-Карло, геополитика --- */
     $('#risksBtn').addEventListener('click', loadRisks);
@@ -910,6 +1001,22 @@ model-viewer{width:100%;height:min(60vh,520px);min-height:280px;border-radius:12
   function note(text, bad) {
     $('#planNote').textContent = text;
     $('#planNote').className = bad ? 'hint bad' : 'hint';
+  }
+
+  /* Открыть конверт плана: из базы или из файла. Сценарий берём из самого конверта,
+     поэтому план считается тем же сценарием, под который он собирался. */
+  function openEnvelope(envelope, message) {
+    state.plan = envelope;
+    state.planKey = '__saved__';
+    state.plans.__saved__ = clone(envelope);
+    if (envelope.scenario_id && state.scenarios.some(function (s) { return s.scenario_id === envelope.scenario_id; })) {
+      state.scenario = envelope.scenario_id;
+      syncScenarioUI();
+    }
+    if (envelope.name) $('#planNameInput').value = envelope.name;
+    fillPlans();
+    say(message + ' Сценарий плана: ' + (envelope.scenario_id || state.scenario) + '.');
+    recompute();
   }
 
   /* Подтверждение действия пишем в строку состояния: подпись под таблицей плана
@@ -947,7 +1054,8 @@ model-viewer{width:100%;height:min(60vh,520px);min-height:280px;border-radius:12
       state.saved = rows || [];
       var sel = $('#savedSel');
       sel.innerHTML = state.saved.map(function (p) {
-        return '<option value="' + escapeHtml(p.plan_id) + '">' + escapeHtml((p.name || p.plan_id)) + '</option>';
+        return '<option value="' + escapeHtml(p.plan_id) + '">' + escapeHtml(p.name || p.plan_id) +
+          ' · ' + escapeHtml(p.scenario_id || 'BASE') + '</option>';
       }).join('') || '<option value="">пока пусто</option>';
       if (selectId) sel.value = selectId;
     }).catch(function () { /* список сохранённых не критичен для работы */ });
@@ -981,9 +1089,75 @@ model-viewer{width:100%;height:min(60vh,520px);min-height:280px;border-radius:12
     if (!run) return;
     syncDecisions(run);
     renderPlan(run);
+    renderContracts(run);
     renderYears(run);
     renderChecks();
     renderTotals();
+    renderKpi(run);
+  }
+
+  /* Договорные обязательства года: сколько законтрактовано, отобрано, оплачено по ToP
+     и сколько оплачено впустую. Числа берутся из прогона, интерфейс ничего не считает. */
+  function renderContracts(run) {
+    var sources = state.case_.sources;
+    var head = '<thead><tr><th>Канал</th><th>Показатель</th>' +
+      run.years.map(function (y) { return '<th>' + y.year + '</th>'; }).join('') + '</tr></thead>';
+    var metrics = [
+      ['законтрактовано, т', function (y, s) { return f1((y.contracted_t || {})[s] || 0); }, null],
+      ['отобрано, т', function (y, s) { return f1(y.ordered_t[s] || 0); }, null],
+      ['оплачено по ToP, т', function (y, s) { return f1((y.payable_t || {})[s] || 0); }, null],
+      ['оплачено, но не отобрано, т', function (y, s) { return f1((y.unused_paid_t || {})[s] || 0); },
+        function (y, s) { return ((y.unused_paid_t || {})[s] || 0) > 0.05 ? 'bad' : ''; }],
+      ['платёж, млн', function (y, s) {
+        return f0(((y.variable_payment_mln || {})[s] || 0) + ((y.reservation_payment_mln || {})[s] || 0)); }, null]
+    ];
+    var body = sources.map(function (s) {
+      var used = run.years.some(function (y) {
+        return (y.ordered_t[s.source_id] || 0) > 0.05 || ((y.contracted_t || {})[s.source_id] || 0) > 0.05;
+      });
+      if (!used) return '';
+      return metrics.map(function (m, idx) {
+        return '<tr' + (idx ? ' class="fact"' : '') + '><td>' +
+          (idx ? '' : '<b>' + s.source_id + ' ' + escapeHtml(s.name) + '</b>') + '</td><td>' + m[0] + '</td>' +
+          run.years.map(function (y) {
+            return '<td class="' + (m[2] ? m[2](y, s.source_id) : '') + '">' + m[1](y, s.source_id) + '</td>';
+          }).join('') + '</tr>';
+      }).join('');
+    }).join('');
+    var eYears = run.years.filter(function (y) { return (y.ordered_t.E || 0) > 0.05; })
+                          .map(function (y) { return y.year; });
+    $('#contractTable').innerHTML = head + '<tbody>' + body + '</tbody>';
+    var note = eYears.length
+      ? 'Аварийный канал вызывался в годах: ' + eYears.join(', ') + '. Это страховка от провала поставки, ' +
+        'а не базовый канал: проверка EMERGENCY_BASE_STREAK следит, чтобы он не закрывал больше 10% спроса ' +
+        'три года подряд.'
+      : 'Аварийный канал в этом сценарии не вызывался: он зарезервирован как страховка и оплачивается ' +
+        'только платой за резерв.';
+    var el = $('#contractNote');
+    if (!el) {
+      el = document.createElement('p');
+      el.id = 'contractNote';
+      el.className = 'note';
+      $('#contractTable').parentNode.appendChild(el);
+    }
+    el.textContent = note;
+  }
+
+  /* Реестр KPI приходит с бэкенда вместе с прогоном: та же таблица уходит в выгрузку. */
+  function renderKpi(run) {
+    var rows = run.kpi || [];
+    if (!rows.length) { $('#kpiTable').innerHTML = ''; return; }
+    $('#kpiTable').innerHTML = '<thead><tr><th>Показатель</th><th>Значение</th><th>Цель</th></tr></thead><tbody>' +
+      rows.map(function (r) {
+        var val = r.unit === 'доля' ? pc(r.value) : (Math.abs(r.value) >= 100 ? f0(r.value) : f1(r.value));
+        var cls = r.status === 'fail' ? 'bad' : (r.status === 'ok' ? 'good' : '');
+        var flag = r.status === 'fail' ? ' ✗' : (r.status === 'ok' ? ' ✓' : '');
+        var target = r.target === null || r.target === undefined ? '—'
+          : (r.unit === 'доля' ? pc(r.target) : f1(r.target));
+        return '<tr title="' + escapeHtml(r.formula) + '"><td>' + escapeHtml(r.label) +
+          (r.period ? '<br><span style="color:var(--ink-3)">' + escapeHtml(String(r.period)) + '</span>' : '') +
+          '</td><td class="' + cls + '">' + val + flag + '</td><td>' + target + '</td></tr>';
+      }).join('') + '</tbody>';
   }
 
   /* Подпись под переключателем инвестиции: только числа, уже пришедшие с бэкенда
@@ -1120,17 +1294,36 @@ model-viewer{width:100%;height:min(60vh,520px);min-height:280px;border-radius:12
     $('#planNote').className = 'hint';
   }
 
+  /* Значок рядом с числом: нарушение должно читаться не только цветом (UI-15). */
+  var mark = function (ok) { return ok ? ' ✓' : ' ✗'; };
+
   function renderYears(run) {
     var rows = [
       [tr('year.demand'), function (y) { return f0(y.demand_total_t); }],
       [tr('year.critical'), function (y) { return f0(y.demand_critical_t); }],
+      [tr('year.opening'), function (y) { return f1(y.opening_t); }],
+      [tr('year.reserveReq'), function (y) { return f1(y.reserve_required_t); },
+        function (y) { return y.opening_t + 1e-6 < y.reserve_required_t ? 'bad' : 'good'; },
+        function (y) { return mark(y.opening_t + 1e-6 >= y.reserve_required_t); }],
+      [tr('year.capacity'), function (y) { return f0(y.capacity_t); }],
+      [tr('year.contracted'), function (y) { return f0(sumOf(y.contracted_t)); }],
       [tr('year.supply'), function (y) { return f0(y.gross_t); }],
       [tr('year.losses'), function (y) { return f1(y.losses_t); }],
+      [tr('year.overflow'), function (y) { return f1(y.overflow_t || 0); },
+        function (y) { return (y.overflow_t || 0) > 0.05 ? 'bad' : ''; }],
       [tr('year.served'), function (y) { return f0(y.served_t); }],
       [tr('year.shortage'), function (y) { return f1(y.shortage_t); }, function (y) { return y.shortage_t > 0.05 ? 'bad' : ''; }],
       [tr('year.closing'), function (y) { return f1(y.closing_t); }],
-      [tr('year.slTotal'), function (y) { return pc(y.sl_total); }, function (y) { return y.sl_total < 0.97 ? 'bad' : 'good'; }],
-      [tr('year.slCritical'), function (y) { return pc(y.sl_critical); }, function (y) { return y.sl_critical < 0.99 ? 'bad' : 'good'; }],
+      [tr('year.slTotal'), function (y) { return pc(y.sl_total); },
+        function (y) { return y.sl_total < 0.97 ? 'bad' : 'good'; },
+        function (y) { return mark(y.sl_total >= 0.97); }],
+      [tr('year.slCritical'), function (y) { return pc(y.sl_critical); },
+        function (y) { return y.sl_critical < 0.99 ? 'bad' : 'good'; },
+        function (y) { return mark(y.sl_critical >= 0.99); }],
+      [tr('year.emergency'), function (y) { return pc(y.emergency_share || 0); },
+        function (y) { return (y.emergency_share || 0) > 0.1 ? 'bad' : ''; }],
+      [tr('year.unusedPaid'), function (y) { return f1(sumOf(y.unused_paid_t)); },
+        function (y) { return sumOf(y.unused_paid_t) > 0.05 ? 'bad' : ''; }],
       [tr('year.cost'), function (y) { return f0(y.total_cost_mln); }],
       [tr('year.capex'), function (y) { return f0(y.cost.capex); }]
     ];
@@ -1138,9 +1331,11 @@ model-viewer{width:100%;height:min(60vh,520px);min-height:280px;border-radius:12
       run.years.map(function (y) { return '<th>' + y.year + '</th>'; }).join('') + '</tr></thead><tbody>' +
       rows.map(function (r) {
         return '<tr><td>' + r[0] + '</td>' + run.years.map(function (y) {
-          return '<td class="' + (r[2] ? r[2](y) : '') + '">' + r[1](y) + '</td>'; }).join('') + '</tr>';
+          return '<td class="' + (r[2] ? r[2](y) : '') + '">' + r[1](y) +
+            (r[3] ? '<span class="flag">' + r[3](y) + '</span>' : '') + '</td>'; }).join('') + '</tr>';
       }).join('') + '</tbody>';
-    $('#balanceNote').textContent = 'Сценарий ' + run.scenario_id + '. Материальный баланс: запас на конец равен запасу на начало плюс поставка минус потери минус выдача.';
+    $('#balanceNote').textContent = 'Сценарий ' + run.scenario_id +
+      '. Материальный баланс: запас на конец = запас на начало + поставка − потери − перелив − выдача.';
     drawStock(run);
     tlPause();
     state.tl.t = 0;
@@ -1346,20 +1541,34 @@ model-viewer{width:100%;height:min(60vh,520px);min-height:280px;border-radius:12
     if (!b || !s) return;
     $('#kpiBase').textContent = f0(b.totals.discounted_cost_mln);
     $('#kpiStress').textContent = f0(s.totals.discounted_cost_mln);
-    $('#kpiSlBase').textContent = pc(b.totals.sl_total);
-    $('#kpiSlStress').textContent = pc(s.totals.sl_total);
-    $('#kpiSlBase').className = b.totals.sl_total < 0.97 ? 'bad' : '';
-    $('#kpiSlStress').className = s.totals.sl_total < 0.97 ? 'bad' : '';
+    // обслуживание показываем по худшему году: ограничение проверяется ежегодно,
+    // а среднее за горизонт маскирует провал (например 96,1% в среднем при 61,5% в 2036)
+    var worst = function (run) { return Math.min.apply(null, run.years.map(function (y) { return y.sl_total; })); };
+    var worstYear = function (run) {
+      return run.years.reduce(function (a, y) { return y.sl_total < a.sl_total ? y : a; }).year;
+    };
+    $('#kpiSlBase').textContent = pc(worst(b)) + ' (' + worstYear(b) + ')';
+    $('#kpiSlStress').textContent = pc(worst(s)) + ' (' + worstYear(s) + ')';
+    $('#kpiSlBase').className = worst(b) < 0.97 ? 'bad' : 'good';
+    $('#kpiSlStress').className = worst(s) < 0.97 ? 'bad' : '';
+    var minStock = function (run) { return Math.min.apply(null, run.years.map(function (y) { return y.closing_t; })); };
+    var reserveMargin = function (run) {
+      return Math.min.apply(null, run.years.map(function (y) { return y.opening_t - y.reserve_required_t; }));
+    };
     var rows = [
-      [tr('tot.rowCost'), 'total_cost_mln', f0],
-      [tr('tot.rowPerT'), 'cost_per_served_t', f1],
-      [tr('tot.rowShortage'), 'shortage_t', f1],
-      [tr('tot.rowLosses'), 'losses_t', f1],
-      [tr('tot.rowSlCrit'), 'sl_critical', pc]
+      [tr('tot.rowCost'), function (r) { return f0(r.totals.total_cost_mln); }],
+      [tr('tot.rowPerT'), function (r) { return f1(r.totals.cost_per_served_t); }],
+      [tr('tot.rowShortage'), function (r) { return f1(r.totals.shortage_t); }],
+      [tr('tot.rowLosses'), function (r) { return f1(r.totals.losses_t); }],
+      [tr('tot.rowSlCrit'), function (r) {
+        return pc(Math.min.apply(null, r.years.map(function (y) { return y.sl_critical; }))); }],
+      [tr('tot.rowStockMin'), function (r) { return f1(minStock(r)); }],
+      [tr('tot.rowReserveMargin'), function (r) { return f1(reserveMargin(r)); }],
+      [tr('tot.rowUnusedPaid'), function (r) { return f1(r.totals.unused_paid_t || 0); }]
     ];
     $('#totalsTable').innerHTML = '<thead><tr><th></th><th>' + tr('tot.base') + '</th><th>' + tr('tot.stress') + '</th></tr></thead><tbody>' +
       rows.map(function (r) {
-        return '<tr><td>' + r[0] + '</td><td>' + r[2](b.totals[r[1]]) + '</td><td>' + r[2](s.totals[r[1]]) + '</td></tr>';
+        return '<tr><td>' + r[0] + '</td><td>' + r[1](b) + '</td><td>' + r[1](s) + '</td></tr>';
       }).join('') + '</tbody>';
     var run = state.runs[state.scenario] || b;
     var parts = [['procurement', tr('cost.procurement'), 'var(--frost)'], ['reservation', tr('cost.reservation'), 'var(--sC)'],
@@ -1371,6 +1580,90 @@ model-viewer{width:100%;height:min(60vh,520px);min-height:280px;border-radius:12
     $('#costLegend').innerHTML = parts.map(function (p) {
       return '<span><i class="sw" style="background:' + p[2] + '"></i> ' + p[1] + ' ' + f0(run.totals[p[0]]) + '</span>';
     }).join('');
+  }
+
+  /* ---------------- сравнение сценариев и стратегий ---------------- */
+  function loadComparison() {
+    busy(true, '#cmpStatus', 'считаю сравнение…');
+    $('#cmpBody').textContent = 'считаю…';
+    Promise.all([
+      api('/api/report/scenarios', { plan: state.plan }),
+      api('/api/report/stress-decomposition', { plan: state.plan, scenario_id: 'MANDATORY_STRESS' })
+    ]).then(function (r) {
+      busy(false, '#cmpStatus');
+      clearError();
+      renderComparison(r[0]);
+      renderDecomposition(r[1]);
+    }).catch(function (e) {
+      busy(false, '#cmpStatus');
+      $('#cmpBody').textContent = 'сравнение посчитать не удалось';
+      showError(e, 'сравнение сценариев');
+    });
+  }
+
+  function renderComparison(rows) {
+    $('#cmpBody').innerHTML = '<table><thead><tr><th>Сценарий</th><th>PV, млн</th><th>Δ к BASE</th>' +
+      '<th>Обслуживание, худший год</th><th>Дефицит, т</th><th>Мин. запас, т</th>' +
+      '<th>Запас над резервом, т</th><th>Нарушения</th></tr></thead><tbody>' +
+      rows.map(function (r) {
+        return '<tr><td><b>' + escapeHtml(r.label) + '</b><br><span style="color:var(--ink-3)">' +
+          escapeHtml(r.scenario_id) + ' · ' + escapeHtml(r.status) + '</span></td>' +
+          '<td>' + f0(r.pv_mln) + '</td>' +
+          '<td class="' + (r.delta_pv_mln > 0.5 ? 'bad' : '') + '">' +
+          (r.delta_pv_mln === null || r.delta_pv_mln === undefined ? '—' : f0(r.delta_pv_mln)) + '</td>' +
+          '<td class="' + (r.sl_total_worst < 0.97 ? 'bad' : 'good') + '">' + pc(r.sl_total_worst) +
+          ' (' + r.sl_total_worst_year + ')' + (r.sl_total_worst < 0.97 ? ' ✗' : ' ✓') + '</td>' +
+          '<td class="' + (r.shortage_t > 0.05 ? 'bad' : '') + '">' + f1(r.shortage_t) + '</td>' +
+          '<td>' + f1(r.min_closing_t) + '</td>' +
+          '<td class="' + (r.reserve_margin_min_t < 0 ? 'bad' : 'good') + '">' + f1(r.reserve_margin_min_t) + '</td>' +
+          '<td class="' + (r.hard_violations ? 'bad' : 'good') + '">' + (r.hard_violations || 0) +
+          (r.violation_codes ? ' <span class="code">' + escapeHtml(r.violation_codes) + '</span>' : '') +
+          '</td></tr>';
+      }).join('') + '</tbody></table>';
+  }
+
+  function renderDecomposition(d) {
+    if (!d) { $('#decompBody').innerHTML = ''; return; }
+    $('#decompBody').innerHTML = '<h3>Из чего складывается эффект обязательного стресса</h3>' +
+      '<table><thead><tr><th>Составляющая</th><th>ΔPV, млн</th><th>Δдефицит, т</th><th>Жёстких нарушений</th></tr></thead><tbody>' +
+      d.components.map(function (r) {
+        return '<tr><td>' + escapeHtml(r.label) + '</td><td class="' + (r.delta_pv_mln > 0.5 ? 'bad' : '') + '">' +
+          f1(r.delta_pv_mln) + '</td><td>' + f1(r.delta_shortage_t) + '</td><td>' + r.hard_violations + '</td></tr>';
+      }).join('') +
+      '<tr><td>Совместный эффект составляющих</td><td>' + f1(d.interaction_pv_mln) + '</td><td>—</td><td>—</td></tr>' +
+      '<tr class="sum"><td>Полный обязательный стресс</td><td>' + f1(d.total_delta_pv_mln) + '</td><td>' +
+      f1(d.delta_shortage_t) + '</td><td>—</td></tr>' +
+      '</tbody></table><p class="note">' + escapeHtml(d.method) + '. База: PV ' + f0(d.base_pv_mln) +
+      ' млн, стресс ' + f0(d.stress_pv_mln) + ' млн.</p>';
+  }
+
+  function loadStrategies() {
+    busy(true, '#cmpStatus', 'считаю стратегии…');
+    api('/api/report/strategies', { plan: state.plan, scenario_ids: ['BASE', 'MANDATORY_STRESS'] })
+      .then(function (rows) {
+        busy(false, '#cmpStatus');
+        clearError();
+        var byPlan = {};
+        rows.forEach(function (r) { (byPlan[r.plan_id] = byPlan[r.plan_id] || []).push(r); });
+        $('#stratBody').innerHTML = '<h3>Готовые планы команды на единой базе</h3>' +
+          '<table><thead><tr><th>План</th><th>Сценарий</th><th>PV, млн</th><th>Расходы, млн</th>' +
+          '<th>Обслуживание, худший год</th><th>Дефицит, т</th><th>Нарушения</th></tr></thead><tbody>' +
+          Object.keys(byPlan).map(function (key) {
+            return byPlan[key].map(function (r, i) {
+              return '<tr' + (i ? ' class="fact"' : '') + '><td>' + (i ? '' : '<b>' +
+                escapeHtml(r.plan_name || key) + '</b>') + '</td><td>' + escapeHtml(r.scenario_id) + '</td>' +
+                '<td>' + f0(r.pv_mln) + '</td><td>' + f0(r.total_mln) + '</td>' +
+                '<td class="' + (r.sl_total_worst < 0.97 ? 'bad' : 'good') + '">' + pc(r.sl_total_worst) + '</td>' +
+                '<td class="' + (r.shortage_t > 0.05 ? 'bad' : '') + '">' + f1(r.shortage_t) + '</td>' +
+                '<td class="' + (r.hard_violations ? 'bad' : 'good') + '">' + (r.hard_violations || 0) +
+                (r.violation_codes ? ' <span class="code">' + escapeHtml(r.violation_codes) + '</span>' : '') +
+                '</td></tr>';
+            }).join('');
+          }).join('') + '</tbody></table>' +
+          '<p class="note">Планы считаются одним ядром, на одной ставке и одних данных. Строка «текущий» ' +
+          'это план, открытый на экране.</p>';
+      })
+      .catch(function (e) { busy(false, '#cmpStatus'); showError(e, 'сравнение стратегий'); });
   }
 
   /* ---------------- чувствительность ---------------- */

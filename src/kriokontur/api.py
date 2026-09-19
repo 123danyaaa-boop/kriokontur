@@ -99,10 +99,11 @@ def _plan(raw: dict) -> Plan:
 
 
 def _result_json(res) -> dict:
+    from .reporting import kpi_rows
     return {
         "plan_id": res.plan_id, "scenario_id": res.scenario_id, "case_version": res.case_version,
         "engine_version": res.engine_version, "created_at": res.created_at, "assumptions": res.assumptions,
-        "feasible": res.feasible, "totals": res.totals,
+        "feasible": res.feasible, "totals": res.totals, "kpi": kpi_rows(CASE, res),
         "years": [{**asdict(y), "sl_total": y.sl_total, "sl_critical": y.sl_critical,
                    "loss_share": y.loss_share, "emergency_share": y.emergency_share} for y in res.years],
         "months": [asdict(m) for m in res.months],
@@ -157,13 +158,35 @@ def post_compare(body: CompareBody):
     return {sid: _result_json(run_engine(CASE, _scenario(sid), plan)) for sid in body.scenario_ids}
 
 
+class SavePlanBody(BaseModel):
+    plan: dict
+    scenario_id: str = "BASE"
+    name: Optional[str] = None
+    plan_id: Optional[str] = None
+
+
 @app.post("/api/plans")
-def post_plan(body: PlanBody):
+def post_plan(body: SavePlanBody):
+    """Сохранение с именем, идентификатором и сценарием.
+
+    Пресеты команды из configs/plans не затираются: если пользователь сохраняет план под
+    именем пресета, идентификатор получает суффикс, и файл-пресет остаётся нетронутым.
+    """
     plan = _plan(body.plan)
+    _scenario(body.scenario_id)
+    if body.name:
+        plan.name = body.name
+    if body.plan_id:
+        plan.plan_id = _safe_name(body.plan_id)
+    presets = {p.stem for p in paths.PLANS.glob("*.json")}
+    if plan.plan_id in presets:
+        from datetime import datetime, timezone
+        plan.plan_id = f"{plan.plan_id}-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
     conn = db.connect()
     db.sync_case(conn, CASE)
     db.sync_scenarios(conn, SCENARIOS, SCEN_DIR)
-    return {"plan_id": db.save_plan(conn, plan)}
+    return {"plan_id": db.save_plan(conn, plan, body.scenario_id), "name": plan.name,
+            "scenario_id": body.scenario_id}
 
 
 @app.get("/api/plans")
@@ -187,10 +210,22 @@ def get_plan_presets():
 
 @app.get("/api/plans/{plan_id}")
 def get_plan(plan_id: str):
-    plan = db.load_plan(db.connect(), plan_id)
-    if plan is None:
-        raise HTTPException(404, "план не найден")
-    return plan.to_envelope()
+    envelope = db.load_envelope(db.connect(), plan_id)
+    if envelope is None:
+        raise HTTPException(404, f"план {plan_id} не найден")
+    return envelope       # как сохранён: с именем и сценарием, под которым строился
+
+
+def _export_extras(plan: Plan, res) -> dict:
+    """Полный пакет выгрузки: исходные данные, KPI, сравнение сценариев, разложение стресса,
+    реестр рисков. Всё считается тем же движком, что и экран."""
+    from .reporting import export_sections
+    from .risks import load_risks
+    try:
+        risks = load_risks()
+    except Exception:            # реестр рисков не должен ломать выгрузку баланса
+        risks = []
+    return export_sections(CASE, SCENARIOS, plan, res, risks=risks)
 
 
 @app.post("/api/export/csv", response_class=PlainTextResponse)
@@ -198,7 +233,7 @@ def post_export(body: PlanBody):
     plan = _plan(body.plan)
     scenario = _scenario(body.scenario_id)
     res = run_engine(CASE, scenario, plan)
-    return export.to_csv(CASE, res, scenario)
+    return export.to_csv(CASE, res, scenario, _export_extras(plan, res))
 
 
 def _safe_name(text: str) -> str:
@@ -215,7 +250,7 @@ def post_export_xlsx(body: PlanBody):
     res = run_engine(CASE, scenario, plan)
     paths.ensure_dirs()
     name = f"{_safe_name(plan.plan_id)}_{_safe_name(scenario.scenario_id)}.xlsx"
-    path = export.write_xlsx(CASE, res, scenario, paths.RESULTS / name)
+    path = export.write_xlsx(CASE, res, scenario, paths.RESULTS / name, _export_extras(plan, res))
     return FileResponse(
         path, filename=name,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -298,6 +333,43 @@ def post_reverse(body: TornadoBody):
     from .sensitivity import reverse_stress
     plan = _plan(body.plan)
     return reverse_stress(CASE, _scenario(body.scenario_id), plan, body.keys)
+
+
+class ComparisonBody(BaseModel):
+    plan: dict
+    scenario_ids: Optional[List[str]] = None
+    baseline: str = "BASE"
+
+
+@app.post("/api/report/scenarios")
+def post_scenario_comparison(body: ComparisonBody):
+    """Один план в нескольких сценариях: расходы, сервис худшего года, запас, дефицит."""
+    from .reporting import scenario_comparison
+    plan = _plan(body.plan)
+    return scenario_comparison(CASE, SCENARIOS, plan, body.scenario_ids, body.baseline)
+
+
+@app.post("/api/report/strategies")
+def post_strategy_comparison(body: ComparisonBody):
+    """Готовые планы команды и текущий план в одних и тех же сценариях."""
+    import json as _json
+
+    from .reporting import strategy_comparison
+    current = _plan(body.plan)
+    plans = {}
+    for path in sorted(paths.PLANS.glob("*.json")):
+        raw = _json.loads(path.read_text(encoding="utf-8"))
+        plans[path.stem] = Plan.from_envelope(raw)
+    plans["текущий"] = current
+    return strategy_comparison(CASE, SCENARIOS, plans, body.scenario_ids)
+
+
+@app.post("/api/report/stress-decomposition")
+def post_stress_decomposition(body: PlanBody):
+    """Разложение эффекта обязательного стресса на спрос, цены, поставку Луны и потолок потерь."""
+    from .reporting import stress_decomposition
+    plan = _plan(body.plan)
+    return stress_decomposition(CASE, SCENARIOS, plan)
 
 
 @app.post("/api/risks")

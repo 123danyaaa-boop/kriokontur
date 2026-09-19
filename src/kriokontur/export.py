@@ -33,7 +33,7 @@ HEADER_CHECK = ["code", "severity", "period", "metric", "value", "limit", "exces
 DECIMALS = 4      # точность выгрузки: числа в CSV печатаются с этим числом знаков
 
 
-def _sections(case: CaseInput, res: RunResult, scenario_price, rules_mod):
+def _sections(case: CaseInput, res: RunResult, scenario_price, rules_mod, extras=None):
     yield ["export_envelope"]
     yield ["scenario_id", res.scenario_id, "plan_id", res.plan_id, "case_version", res.case_version,
            "engine_version", res.engine_version, "created_at", res.created_at]
@@ -90,6 +90,14 @@ def _sections(case: CaseInput, res: RunResult, scenario_price, rules_mod):
     for v in res.violations:
         yield [v.code, v.severity, v.period, v.metric, v.value, v.limit, v.excess, v.message]
 
+    # дополнительные разделы: исходные данные, KPI, сравнение сценариев, разложение стресса,
+    # реестр рисков. Собираются в reporting из того же RunResult и тех же прогонов движка.
+    for name, rows in (extras or {}).items():
+        yield []
+        yield [name]
+        for row in rows:
+            yield list(row)
+
 
 def _cell(value):
     """CSV: числа печатаются с фиксированной точностью, остальное как есть."""
@@ -102,36 +110,32 @@ def _cell(value):
     return value
 
 
-def to_csv(case: CaseInput, res: RunResult, scenario) -> str:
+def to_csv(case: CaseInput, res: RunResult, scenario, extras=None) -> str:
     buf = io.StringIO()
     writer = csv.writer(buf, delimiter=";", lineterminator="\n")
-    for row in _sections(case, res, scenario.price_factor, None):
+    for row in _sections(case, res, scenario.price_factor, None, extras):
         writer.writerow([_cell(v) for v in row])
     return buf.getvalue()
 
 
-def write_csv(case: CaseInput, res: RunResult, scenario, path: Path | str) -> Path:
+def write_csv(case: CaseInput, res: RunResult, scenario, path: Path | str, extras=None) -> Path:
     path = resolve_for_write(path, "выгрузка CSV")
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("﻿" + to_csv(case, res, scenario), encoding="utf-8")
+    path.write_text("﻿" + to_csv(case, res, scenario, extras), encoding="utf-8")
     return path
 
 
-def write_xlsx(case: CaseInput, res: RunResult, scenario, path: Path | str) -> Path:
+def write_xlsx(case: CaseInput, res: RunResult, scenario, path: Path | str, extras=None) -> Path:
     from openpyxl import Workbook
     path = resolve_for_write(path, "выгрузка XLSX")
     path.parent.mkdir(parents=True, exist_ok=True)
     wb = Workbook()
     wb.remove(wb.active)
-    sheets = {"yearly_balance": HEADER_YEAR, "source_schedule": HEADER_SOURCE,
-              "financial_breakdown": HEADER_FIN, "inventory_trace": HEADER_TRACE,
-              "constraint_checks": HEADER_CHECK}
+    sheets = set(("yearly_balance", "source_schedule", "financial_breakdown", "inventory_trace",
+                  "constraint_checks", "export_envelope", "assumptions")) | set(extras or {})
     current = None
-    for row in _sections(case, res, scenario.price_factor, None):
+    for row in _sections(case, res, scenario.price_factor, None, extras):
         if len(row) == 1 and row[0] in sheets:
-            current = wb.create_sheet(row[0])
-            continue
-        if len(row) == 1 and row[0] in ("export_envelope", "assumptions"):
             current = wb.create_sheet(row[0][:31])
             continue
         if current is not None and row:
