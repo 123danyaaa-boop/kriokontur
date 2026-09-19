@@ -16,11 +16,11 @@ from .caseinput import CaseInput
 from .engine import RunResult
 from .plan import Plan
 
-SCHEMA = Path(__file__).resolve().parents[2] / "db" / "schema.sql"
-DEFAULT_DB = Path(__file__).resolve().parents[2] / "db" / "kriokontur.sqlite3"
+from .paths import DB_FILE as DEFAULT_DB, SCHEMA_SQL as SCHEMA, ensure_dirs
 
 
 def connect(path: Path | str = DEFAULT_DB) -> sqlite3.Connection:
+    ensure_dirs()
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)

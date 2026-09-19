@@ -11,6 +11,7 @@ from typing import List
 
 from .caseinput import CaseInput
 from .engine import RunResult
+from .paths import resolve_for_write
 
 HEADER_YEAR = ["year", "demand_total_t", "demand_critical_t", "opening_t", "delivered_t", "losses_t",
                "served_t", "served_critical_t", "shortage_t", "closing_t", "capacity_t",
@@ -89,7 +90,7 @@ def to_csv(case: CaseInput, res: RunResult, scenario) -> str:
 
 
 def write_csv(case: CaseInput, res: RunResult, scenario, path: Path | str) -> Path:
-    path = Path(path)
+    path = resolve_for_write(path, "выгрузка CSV")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\ufeff" + to_csv(case, res, scenario), encoding="utf-8")
     return path
@@ -97,7 +98,7 @@ def write_csv(case: CaseInput, res: RunResult, scenario, path: Path | str) -> Pa
 
 def write_xlsx(case: CaseInput, res: RunResult, scenario, path: Path | str) -> Path:
     from openpyxl import Workbook
-    path = Path(path)
+    path = resolve_for_write(path, "выгрузка XLSX")
     path.parent.mkdir(parents=True, exist_ok=True)
     wb = Workbook()
     wb.remove(wb.active)

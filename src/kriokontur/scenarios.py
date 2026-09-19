@@ -26,7 +26,7 @@ import yaml
 
 from .caseinput import CaseInput
 
-SCEN_DIR = Path(__file__).resolve().parents[2] / "configs" / "scenarios"
+from .paths import SCENARIOS as SCEN_DIR  # единая точка правды по путям, см. paths.py
 CONTROL_IDS = ("BASE", "MANDATORY_STRESS")
 
 

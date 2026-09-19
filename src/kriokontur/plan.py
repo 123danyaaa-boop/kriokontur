@@ -11,6 +11,8 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from .paths import resolve_for_read, resolve_for_write
+
 DEFAULT_ASSUMPTIONS = {
     "discount_rate": 0.08,
     "discount_base_year": 2035,
@@ -86,8 +88,10 @@ class Plan:
         return plan
 
     def save(self, path: Path | str, scenario_id: str = "BASE") -> None:
-        Path(path).write_text(json.dumps(self.to_envelope(scenario_id), ensure_ascii=False, indent=2), encoding="utf-8")
+        target = resolve_for_write(path, "план")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(self.to_envelope(scenario_id), ensure_ascii=False, indent=2), encoding="utf-8")
 
     @staticmethod
     def load(path: Path | str) -> "Plan":
-        return Plan.from_envelope(json.loads(Path(path).read_text(encoding="utf-8")))
+        return Plan.from_envelope(json.loads(resolve_for_read(path).read_text(encoding="utf-8")))

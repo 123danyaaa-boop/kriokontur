@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
 
-DATA_DIR = Path(__file__).resolve().parents[2] / "data"
+from .paths import DATA as DATA_DIR  # единая точка правды по путям, см. paths.py
 
 
 @dataclass(frozen=True)

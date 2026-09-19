@@ -33,7 +33,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import ENGINE_VERSION, db, export
+from . import ENGINE_VERSION, db, export, paths
 from .caseinput import load_case
 from .checks import validate_plan
 from .engine import run as run_engine
@@ -147,7 +147,7 @@ def get_plan_presets():
     """Готовые планы команды из configs/plans: то, что фронт показывает в выпадающем списке."""
     import json as _json
     out = {}
-    folder = _Path(__file__).resolve().parents[2] / "configs" / "plans"
+    folder = paths.PLANS
     order = {"final-candidate": 0}
     for path in sorted(folder.glob("*.json"), key=lambda p: (order.get(p.stem, 1), p.stem)):
         raw = _json.loads(path.read_text(encoding="utf-8"))
@@ -341,7 +341,7 @@ def post_horizon(body: HorizonBody):
 # --------------------------------------------------------------------------- #
 # фронтенд: статические файлы из web/
 # --------------------------------------------------------------------------- #
-_WEB = _Path(__file__).resolve().parents[2] / "web"
+_WEB = paths.WEB
 if _WEB.exists():
     @app.get("/")
     def index():

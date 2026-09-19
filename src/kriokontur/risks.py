@@ -26,7 +26,7 @@ from .plan import Plan
 from .scenarios import Scenario
 from .sensitivity import metrics
 
-RISKS_PATH = Path(__file__).resolve().parents[2] / "configs" / "risks.yaml"
+from .paths import RISKS_CONFIG as RISKS_PATH  # единая точка правды по путям, см. paths.py
 
 
 # --------------------------------------------------------------------------- #

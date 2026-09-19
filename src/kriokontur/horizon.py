@@ -29,7 +29,7 @@ import yaml
 
 from .caseinput import CaseInput, InvestmentOption, Source, StorageOption
 
-CONFIG_PATH = Path(__file__).resolve().parents[2] / "configs" / "horizon.yaml"
+from .paths import HORIZON_CONFIG as CONFIG_PATH  # единая точка правды по путям, см. paths.py
 
 
 @dataclass
