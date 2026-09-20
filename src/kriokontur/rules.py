@@ -56,6 +56,15 @@ def reserve_days_to_tonnes(annual_demand_t: float, days: float = 45) -> float:
     return annual_demand_t * days / DAYS_IN_YEAR
 
 
+def gross_requirement(demand_t: float, reserve_growth_t: float, loss_rate: float) -> float:
+    """Валовая потребность периода: спрос плюс прирост резерва с поправкой на потери.
+
+    Одна формула для эвристики автоплана и для режима замороженного графика поставок,
+    чтобы «сколько нужно заказать» считалось в одном месте.
+    """
+    return (demand_t + reserve_growth_t) / (1.0 - loss_rate)
+
+
 def emergency_batch(reserved_t_per_year: float, lead_steps: int, months_in_year: int = MONTHS_IN_YEAR,
                     explicit_batch_t=None) -> float:
     """Объём одной партии аварийного канала, т.

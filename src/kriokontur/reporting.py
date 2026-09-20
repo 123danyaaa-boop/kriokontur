@@ -124,6 +124,56 @@ def scenario_comparison(case: CaseInput, scenarios: Dict[str, Scenario], plan: P
     return rows
 
 
+def dispatch_comparison(case: CaseInput, scenarios: Dict[str, Scenario], plan: Plan,
+                        scenario_ids: Optional[List[str]] = None) -> Dict:
+    """Что решается заранее, а что после наблюдения: цена управленческой информации.
+
+    Реактивный режим пересматривает месячный отбор каждый месяц по текущему состоянию.
+    Для канала со сроком поставки 12 месяцев это верхняя граница качества управления:
+    заказ так быстро не переразмещается. Замороженный режим фиксирует годовой график
+    в начале года, внутри года реагирует только аварийный канал (шесть недель).
+    Разница двух прогонов и есть цена того, что модель «знает сценарий заранее».
+    """
+    import copy
+
+    ids = [sid for sid in (scenario_ids or CONTROL_COMPARISON) if sid in scenarios]
+    frozen_plan = copy.deepcopy(plan)
+    frozen_plan.assumptions = {**plan.assumptions, "dispatch_mode": "frozen"}
+    rows = []
+    for sid in ids:
+        a = run(case, scenarios[sid], plan)
+        b = run(case, scenarios[sid], frozen_plan)
+        rows.append({
+            "scenario_id": sid,
+            "reactive_pv_mln": a.totals["discounted_cost_mln"],
+            "frozen_pv_mln": b.totals["discounted_cost_mln"],
+            "value_of_information_mln": b.totals["discounted_cost_mln"] - a.totals["discounted_cost_mln"],
+            "reactive_shortage_t": a.totals["shortage_t"],
+            "frozen_shortage_t": b.totals["shortage_t"],
+            "reactive_sl_worst": min(y.sl_total for y in a.years),
+            "frozen_sl_worst": min(y.sl_total for y in b.years),
+            "reactive_hard": sum(1 for v in a.violations if v.severity == "hard"),
+            "frozen_hard": sum(1 for v in b.violations if v.severity == "hard"),
+            "frozen_feasible": b.feasible,
+        })
+    return {
+        "rows": rows,
+        "reaction_time": {
+            "Earth-Core": "12 месяцев: объём года размещается заранее, внутри года не меняется",
+            "Earth-Flex": "4 месяца: объём можно поправить внутри года",
+            "Earth-New": "18–24 месяца подготовки, далее как базовый канал",
+            "Lunar-ISRU": "решение необратимо после финансирования, ввод не раньше 2038 года",
+            "Emergency": "6 недель: единственный канал, который реально реагирует внутри квартала",
+        },
+        "decided_in_advance": ["инвестиции и их годы", "резервирование мощности по каналам и годам",
+                               "политика запаса и начальный запас", "размер партии аварийного договора"],
+        "decided_after_observation": ["вызов аварийного канала", "месячный отбор в реактивном режиме"],
+        "note": ("Разница между режимами это верхняя оценка ценности оперативной информации. "
+                 "План признаётся устойчивым, только если он проходит ограничения и в замороженном "
+                 "режиме: тогда вывод не держится на предположении, что оператор знает будущее."),
+    }
+
+
 def strategy_comparison(case: CaseInput, scenarios: Dict[str, Scenario], plans: Dict[str, Plan],
                         scenario_ids: Optional[List[str]] = None) -> List[Dict]:
     """Несколько планов в одних и тех же сценариях: база для выбора стратегии."""

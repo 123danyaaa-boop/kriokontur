@@ -179,6 +179,17 @@ def validate_envelope(case: CaseInput, raw) -> List[Violation]:
     if not isinstance(assumptions, dict):
         out.append(_invalid("assumptions", None, assumptions, "ожидается объект допущений"))
     else:
+        mode = assumptions.get("dispatch_mode", "reactive")
+        if mode not in ("reactive", "frozen"):
+            out.append(_invalid("assumptions.dispatch_mode", None, mode,
+                                "допустимо reactive (пересмотр каждый месяц) или frozen "
+                                "(годовой график заморожен, реагирует только аварийный канал)"))
+        batch = assumptions.get("emergency_batch_t")
+        if batch is not None:
+            num = _number(batch)
+            if num is None or num < 0:
+                out.append(_invalid("assumptions.emergency_batch_t", None, batch,
+                                    "размер партии аварийного канала: число не меньше нуля или пусто"))
         for key, (low, high, unit, basis) in ASSUMPTION_RANGES.items():
             if key not in assumptions:
                 continue

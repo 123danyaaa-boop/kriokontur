@@ -29,6 +29,7 @@ from .scenarios import Scenario
 
 MONTHS = 12
 MERIT_EXCLUDE = {"E"}  # аварийный канал не участвует в плановом добора по цене
+DISPATCH_MODES = ("reactive", "frozen")
 
 
 @dataclass
@@ -190,6 +191,43 @@ def storage_mode(case: CaseInput, plan: Plan, year: int, month_index: Optional[i
 INVESTMENT_SOURCE = {"LUNAR_ISRU": "D", "LUNAR_ISRU_PHASE2": "D2", "EARTH_NEW": "C"}
 
 
+def frozen_schedule(case: CaseInput, plan: Plan, scenario: Scenario,
+                    avail: Dict[str, Optional[int]], storage_lag: float = 0.0) -> Dict[str, Dict[int, float]]:
+    """Годовой график отбора, замороженный в начале года (режим dispatch_mode = frozen).
+
+    Зачем нужен: в обычном режиме диспетчер меняет месячный отбор сразу, как только меняются
+    условия сценария. Для канала со сроком поставки 12 месяцев это физически невозможно —
+    заказ размещается заранее. В замороженном режиме объём года рассчитывается один раз
+    по прогнозу этого года (спрос плюс прирост резерва, распределение по возрастанию цены)
+    и дальше исполняется равными месячными долями. Внутри года реагирует только аварийный
+    канал: его срок поставки шесть недель.
+
+    Возвращает {source_id: {year: годовой объём отбора}}.
+    """
+    merit = sorted([s for s in case.source_list if s.source_id not in MERIT_EXCLUDE],
+                   key=lambda s: s.variable_cost_mln_per_t)
+    out: Dict[str, Dict[int, float]] = {s.source_id: {} for s in case.source_list}
+    for i, year in enumerate(case.years):
+        store = storage_mode(case, plan, year, i * MONTHS, storage_lag)
+        demand = scenario.demand_total(case, year)
+        reserve_now = rules.reserve_days_to_tonnes(demand)
+        next_year = case.years[i + 1] if i + 1 < len(case.years) else None
+        reserve_next = (rules.reserve_days_to_tonnes(scenario.demand_total(case, next_year))
+                        if next_year is not None else reserve_now)
+        left = rules.gross_requirement(demand, max(0.0, reserve_next - reserve_now),
+                                       store.loss_rate_on_throughput)
+        for s in merit:
+            months_on = months_available(avail.get(s.source_id), i)
+            if months_on <= 0:
+                out[s.source_id][year] = 0.0
+                continue
+            contracted = plan.reserved(s.source_id, year) * months_on / MONTHS
+            take = max(0.0, min(left, contracted))
+            out[s.source_id][year] = take
+            left -= take
+    return out
+
+
 def capex_schedule(case: CaseInput, plan: Plan) -> Dict[int, float]:
     """CAPEX по годам решения. Ключи плана читаются по общему правилу:
 
@@ -256,6 +294,9 @@ def run(case: CaseInput, scenario: Scenario, plan: Plan) -> RunResult:
     ramp_months = float(plan.assume("reserve_ramp_months"))
     safety = float(plan.assume("reserve_safety_factor"))
     store_lag = float(plan.assume("storage_commissioning_lag_months") or 0.0)
+    dispatch_mode = str(plan.assume("dispatch_mode") or "reactive")
+    frozen = (frozen_schedule(case, plan, scenario, avail, store_lag)
+              if dispatch_mode == "frozen" else None)
 
     years = [YearRow(year=y,
                      demand_total_t=scenario.demand_total(case, y),
@@ -324,21 +365,31 @@ def run(case: CaseInput, scenario: Scenario, plan: Plan) -> RunResult:
             ordered[sid] += gross_want
             return gross_want * net
 
-        # 2.1 явные заказы команды и минимумы take-or-pay
-        for s in case.source_list:
-            if s.source_id in MERIT_EXCLUDE:
-                continue
-            explicit = plan.ordered(s.source_id, year)
-            if explicit is not None:
-                take(s.source_id, explicit / max(1, months_available(avail.get(s.source_id), i)) * net)
-            elif s.take_or_pay_share > 0:
-                take(s.source_id, s.take_or_pay_share * plan.reserved(s.source_id, year) / MONTHS * net)
+        if frozen is not None:
+            # 2.0 замороженный график: месячная доля решения, принятого в начале года.
+            # Внутри года объём не пересматривается, поэтому канал не реагирует на то,
+            # чего оператор в момент заказа знать не мог.
+            for s in case.source_list:
+                if s.source_id in MERIT_EXCLUDE:
+                    continue
+                months_on = max(1, months_available(avail.get(s.source_id), i))
+                take(s.source_id, frozen[s.source_id].get(year, 0.0) / months_on * net)
+        else:
+            # 2.1 явные заказы команды и минимумы take-or-pay
+            for s in case.source_list:
+                if s.source_id in MERIT_EXCLUDE:
+                    continue
+                explicit = plan.ordered(s.source_id, year)
+                if explicit is not None:
+                    take(s.source_id, explicit / max(1, months_available(avail.get(s.source_id), i)) * net)
+                elif s.take_or_pay_share > 0:
+                    take(s.source_id, s.take_or_pay_share * plan.reserved(s.source_id, year) / MONTHS * net)
 
-        # 2.2 добор по возрастанию переменной цены
-        for s in merit:
-            need = demand_m + target - stock - sum(ordered.values()) * net
-            if need > 1e-9 and plan.ordered(s.source_id, year) is None:
-                take(s.source_id, need)
+            # 2.2 добор по возрастанию переменной цены
+            for s in merit:
+                need = demand_m + target - stock - sum(ordered.values()) * net
+                if need > 1e-9 and plan.ordered(s.source_id, year) is None:
+                    take(s.source_id, need)
 
         # 2.3 аварийный канал: смотрим на lead_steps вперёд
         reserved_e = plan.reserved("E", year)
@@ -349,7 +400,11 @@ def run(case: CaseInput, scenario: Scenario, plan: Plan) -> RunResult:
                 if mk >= total_months:
                     break
                 ik = mk // MONTHS
-                inflow_k = sum(min(plan.reserved(s.source_id, case.years[ik]) / MONTHS,
+                # прогноз строится по фактически доступной мощности: объявленное ограничение
+                # мощности канала оператору известно заранее, поэтому учитывается здесь.
+                # Неожиданная недопоставка (delivery_share) в прогноз не закладывается.
+                inflow_k = sum(min(plan.reserved(s.source_id, case.years[ik]) / MONTHS
+                                   * scenario.capacity_factor(s.name, s.source_id, case.years[ik]),
                                    years[ik].demand_total_t / MONTHS)
                                for s in merit if avail.get(s.source_id) is not None and mk >= avail[s.source_id])
                 projected += inflow_k * net + emergency_pipeline.get(mk, 0.0) - years[ik].demand_total_t / MONTHS

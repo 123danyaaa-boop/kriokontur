@@ -364,6 +364,14 @@ def post_strategy_comparison(body: ComparisonBody):
     return strategy_comparison(CASE, SCENARIOS, plans, body.scenario_ids)
 
 
+@app.post("/api/report/dispatch")
+def post_dispatch_comparison(body: ComparisonBody):
+    """Что решается заранее, что после наблюдения, и сколько стоит эта информация."""
+    from .reporting import dispatch_comparison
+    plan = _plan(body.plan)
+    return dispatch_comparison(CASE, SCENARIOS, plan, body.scenario_ids)
+
+
 @app.post("/api/report/stress-decomposition")
 def post_stress_decomposition(body: PlanBody):
     """Разложение эффекта обязательного стресса на спрос, цены, поставку Луны и потолок потерь."""
@@ -521,6 +529,58 @@ def post_custom_scenario(body: CustomScenarioBody):
         "delta_shortage_t": res.totals["shortage_t"] - base_res.totals["shortage_t"],
     }
     return payload
+
+
+class GridBody(BaseModel):
+    plan: dict
+    scenario_id: str = "BASE"
+    key_x: str = "demand"
+    key_y: str = "core_capacity"
+    steps: int = 5
+
+
+@app.post("/api/sensitivity/grid")
+def post_grid(body: GridBody):
+    """Двухфакторная сетка: где план остаётся исполнимым при совместном изменении двух условий."""
+    from .sensitivity import PARAMS, grid
+    plan = _plan(body.plan)
+    for key in (body.key_x, body.key_y):
+        if key not in PARAMS:
+            raise HTTPException(422, {"message": f"неизвестный параметр {key}",
+                                      "violations": [], "known": sorted(PARAMS)})
+    if not 2 <= body.steps <= 9:
+        raise HTTPException(422, {"message": "число шагов сетки должно быть от 2 до 9", "violations": []})
+    return grid(CASE, _scenario(body.scenario_id), plan, body.key_x, body.key_y, body.steps)
+
+
+class SwitchBody(BaseModel):
+    plan: dict
+    alternative_plan: Optional[dict] = None
+    alternative_preset: Optional[str] = None
+    scenario_id: str = "BASE"
+    keys: Optional[List[str]] = None
+
+
+@app.post("/api/sensitivity/switch")
+def post_switch_point(body: SwitchBody):
+    """При каком значении параметра выбранная стратегия уступает альтернативе."""
+    import json as _json
+
+    from .sensitivity import switch_point
+    plan = _plan(body.plan)
+    if body.alternative_plan is not None:
+        alternative = _plan(body.alternative_plan)
+    elif body.alternative_preset:
+        path = paths.PLANS / f"{_safe_name(body.alternative_preset)}.json"
+        if not path.exists():
+            raise HTTPException(404, f"пресет {body.alternative_preset} не найден")
+        alternative = _plan(_json.loads(path.read_text(encoding="utf-8")))
+    else:
+        raise HTTPException(422, {"message": "нужен альтернативный план: alternative_plan или alternative_preset",
+                                  "violations": []})
+    scenario = _scenario(body.scenario_id)
+    keys = body.keys or ["demand", "price_earth", "core_capacity"]
+    return [switch_point(CASE, scenario, plan, alternative, key) for key in keys]
 
 
 @app.post("/api/risks")

@@ -98,35 +98,75 @@ def _opening_stock(case: CaseInput, sc: Scenario, plan: Plan, v: float) -> Appli
     return sc, p
 
 
+def _scale_reservation(source_id: str, factor: float):
+    """Множитель к резервированию канала: решение команды, а не условие кейса."""
+    def apply(plan: Plan, case: CaseInput) -> Plan:
+        p = copy.deepcopy(plan)
+        cap = case.sources[source_id].capacity_t_per_year
+        p.reservations[source_id] = {y: min(cap, round(p.reserved(source_id, y) * factor, 3))
+                                     for y in case.years}
+        return p
+    return apply
+
+
 PARAMS: Dict[str, Param] = {
-    "demand": Param("demand", "Спрос, множитель ко всем годам", "доля", 1.0, 0.8, 1.4, "scenario", _scale_demand,
-                    "диапазон покрывает низкий и высокий варианты кейса и запас сверх них"),
-    "price_earth": Param("price_earth", "Цена Earth-Core и Earth-Flex", "доля", 1.0, 0.8, 1.8, "scenario",
-                         _scale_price(("A", "B")), "обязательный стресс даёт +25%, проверяем шире"),
-    "price_core": Param("price_core", "Цена Earth-Core", "доля", 1.0, 0.8, 2.0, "scenario", _scale_price(("A",)),
-                        "чувствительность к главному каналу"),
-    "isru_delivery": Param("isru_delivery", "Фактическая поставка Луны", "доля", 1.0, 0.3, 1.0, "scenario",
-                           _scale_delivery("D"), "стресс задаёт 55% и 75%, надёжность кейса 0,78–0,93"),
-    "core_capacity": Param("core_capacity", "Доступная мощность Earth-Core", "доля", 1.0, 0.4, 1.0, "scenario",
-                           _scale_capacity("A"), "сбой у поставщика без снятия take-or-pay"),
+    "demand": Param("demand", "Спрос, множитель ко всем годам", "доля", 1.0, 0.8, 1.25, "scenario", _scale_demand,
+                    "CASE_INPUT: ряды low_total_t и high_total_t дают 0,80 и 1,25 от базового "
+                    "спроса; обязательный стресс добавляет 1,15 с 2038 года. Границы диапазона "
+                    "взяты из самих данных кейса, а не назначены командой"),
+    "price_earth": Param("price_earth", "Цена Earth-Core и Earth-Flex", "доля", 1.0, 0.75, 1.5, "scenario",
+                         _scale_price(("A", "B")),
+                         "CASE_INPUT: обязательный стресс задаёт +25% на 2038–2039. Вниз берём "
+                         "симметричные −25%, вверх удвоенный шок +50% как сценарную границу "
+                         "геополитического риска (TEAM_RESEARCH, вероятность не назначается)"),
+    "price_core": Param("price_core", "Цена Earth-Core", "доля", 1.0, 0.75, 1.5, "scenario", _scale_price(("A",)),
+                        "тот же диапазон, что и для пары земных каналов: проверяем вклад "
+                        "главного канала отдельно от гибкого"),
+    "isru_delivery": Param("isru_delivery", "Фактическая поставка Луны", "доля", 1.0, 0.55, 1.0, "scenario",
+                           _scale_delivery("D"),
+                           "CASE_INPUT: обязательный стресс задаёт 55% и 75% фактической поставки, "
+                           "профиль надёжности 0,78–0,93. Нижняя граница 0,55 это худшее значение кейса"),
+    "core_capacity": Param("core_capacity", "Доступная мощность Earth-Core", "доля", 1.0, 0.5, 1.0, "scenario",
+                           _scale_capacity("A"),
+                           "TEAM_RESEARCH: половина мощности это сценарий длительной приостановки "
+                           "парка носителей; take-or-pay при этом не снимается"),
     "discount_rate": Param("discount_rate", "Ставка дисконтирования", "доля", 0.08, 0.0, 0.15, "plan",
-                           _plan_assumption("discount_rate"), "ставка не задана организатором, это TEAM_ASSUMPTION"),
+                           _plan_assumption("discount_rate"),
+                           "TEAM_ASSUMPTION: ставка кейсом не задана. 0% это недисконтированное "
+                           "сравнение, 15% верхняя граница для проектов такого горизонта"),
     "earth_new_prep": Param("earth_new_prep", "Подготовка Earth-New", "мес.", 18, 18, 24, "plan",
-                            _plan_assumption("earth_new_prep_months"), "кейс задаёт интервал 18–24 месяца"),
-    "opening_stock": Param("opening_stock", "Начальный запас", "т", 12.4, 0.0, 40.0, "plan", _opening_stock,
-                           "решение команды о подготовительном периоде"),
+                            _plan_assumption("earth_new_prep_months"),
+                            "CASE_INPUT: кейс задаёт интервал 18–24 месяца, шире брать нельзя"),
+    "opening_stock": Param("opening_stock", "Начальный запас", "т", 13.6, 0.0, 70.0, "plan", _opening_stock,
+                           "TEAM_DECISION: от нуля до ёмкости базового хранилища 70 т; "
+                           "верхняя граница физическая, а не назначенная"),
+    "emergency_reserve": Param("emergency_reserve", "Резерв аварийного канала", "доля", 1.0, 0.0, 1.3, "plan",
+                               lambda case, sc, plan, v: (sc, _scale_reservation("E", v)(plan, case)),
+                               "TEAM_DECISION: от полного отказа от аварийного договора до "
+                               "резерва на уровне мощности канала 80 т/год"),
 }
 
 
 def metrics(res: RunResult) -> Dict[str, float]:
+    """Метрики чувствительности: деньги, сервис, запас и дефицит.
+
+    Кейс требует показывать не только стоимость: метрика запаса и дефицита обязательна,
+    иначе анализ не отвечает на вопрос «где план перестаёт быть исполнимым».
+    """
     hard = [v for v in res.violations if v.severity == "hard"]
     return {
         "pv_mln": res.totals["discounted_cost_mln"],
         "total_mln": res.totals["total_cost_mln"],
         "sl_total": res.totals["sl_total"],
+        "sl_total_worst": min(y.sl_total for y in res.years),
         "sl_critical": res.totals["sl_critical"],
+        "sl_critical_worst": min(y.sl_critical for y in res.years),
         "shortage_t": res.totals["shortage_t"],
         "losses_t": res.totals["losses_t"],
+        "min_closing_t": min(y.closing_t for y in res.years),
+        "reserve_margin_min_t": min(y.opening_t - y.reserve_required_t for y in res.years),
+        "unused_paid_t": res.totals.get("unused_paid_t", 0.0),
+        "cost_per_served_t": res.totals["cost_per_served_t"],
         "hard_violations": float(len(hard)),
         "feasible": 1.0 if not hard else 0.0,
         "codes": ",".join(sorted({v.code for v in hard})),
@@ -209,3 +249,93 @@ def reverse_stress(case: CaseInput, scenario: Scenario, plan: Plan,
         if res:
             rows.append(res)
     return rows
+
+
+def grid(case: CaseInput, scenario: Scenario, plan: Plan, key_x: str, key_y: str,
+         steps: int = 5) -> Dict:
+    """Двухфакторная сетка: совместное изменение двух параметров.
+
+    Кейс прямо требует проверять совместные изменения: по одному параметру план может
+    держаться, а вместе спрос и цена ломают его раньше. Сетка показывает область
+    исполнимости, а не одну точку порога.
+    """
+    px, py = PARAMS[key_x], PARAMS[key_y]
+    xs = [px.low + (px.high - px.low) * i / (steps - 1) for i in range(steps)]
+    ys = [py.low + (py.high - py.low) * i / (steps - 1) for i in range(steps)]
+    cells = []
+    for vy in ys:
+        row = []
+        for vx in xs:
+            sc, pl = px.apply(case, scenario, plan, vx)
+            sc, pl = py.apply(case, sc, pl, vy)
+            m = metrics(run(case, sc, pl))
+            row.append({"x": vx, "y": vy, "pv_mln": m["pv_mln"], "shortage_t": m["shortage_t"],
+                        "sl_total_worst": m["sl_total_worst"],
+                        "reserve_margin_min_t": m["reserve_margin_min_t"],
+                        "feasible": bool(m["feasible"]), "codes": m["codes"]})
+        cells.append(row)
+    infeasible = [c for row in cells for c in row if not c["feasible"]]
+    return {
+        "x": {"key": key_x, "label": px.label, "unit": px.unit, "values": xs, "basis": px.basis},
+        "y": {"key": key_y, "label": py.label, "unit": py.unit, "values": ys, "basis": py.basis},
+        "cells": cells,
+        "feasible_cells": sum(1 for row in cells for c in row if c["feasible"]),
+        "total_cells": steps * steps,
+        "first_infeasible": min(infeasible, key=lambda c: (c["x"], c["y"])) if infeasible else None,
+        "note": ("Совместное изменение двух параметров: клетка «неисполнимо» означает жёсткое "
+                 "нарушение хотя бы одного ограничения при данном сочетании значений."),
+    }
+
+
+def switch_point(case: CaseInput, scenario: Scenario, plan: Plan, alternative: Plan, key: str,
+                 tol: float = 1e-3, max_iter: int = 40) -> Dict:
+    """Порог, после которого выбранная стратегия уступает альтернативе.
+
+    Кейс требует не просто «где план ломается», а «при каком значении параметра другой план
+    становится лучше». Сравнение идёт по приведённым расходам при условии исполнимости:
+    неисполнимый план не может выигрывать у исполнимого.
+    """
+    param = PARAMS[key]
+
+    def better(value: float) -> Dict:
+        """Правило выбора лидера, объявленное явно и одинаковое для обеих стратегий:
+
+            1) исполнимый план всегда лучше неисполнимого;
+            2) если оба неисполнимы — меньше недопоставка;
+            3) при равном обслуживании — меньше приведённые расходы.
+
+        Порядок именно такой: кейс запрещает выдавать неисполнимый план за корректный,
+        поэтому дешевизна не может перевесить нарушение ограничения.
+        """
+        sc_a, pl_a = param.apply(case, scenario, plan, value)
+        sc_b, pl_b = param.apply(case, scenario, alternative, value)
+        a, b = metrics(run(case, sc_a, pl_a)), metrics(run(case, sc_b, pl_b))
+        if a["feasible"] != b["feasible"]:
+            wins, reason = b["feasible"] > a["feasible"], "исполнимость"
+        elif abs(a["shortage_t"] - b["shortage_t"]) > 0.05:
+            wins, reason = b["shortage_t"] < a["shortage_t"], "недопоставка"
+        else:
+            wins, reason = b["pv_mln"] < a["pv_mln"] - 1e-9, "приведённые расходы"
+        return {"value": value, "plan_pv_mln": a["pv_mln"], "alternative_pv_mln": b["pv_mln"],
+                "plan_shortage_t": a["shortage_t"], "alternative_shortage_t": b["shortage_t"],
+                "plan_feasible": bool(a["feasible"]), "alternative_feasible": bool(b["feasible"]),
+                "decided_by": reason, "alternative_wins": wins}
+
+    lo, hi = better(param.low), better(param.high)
+    if lo["alternative_wins"] == hi["alternative_wins"]:
+        return {"key": key, "label": param.label, "unit": param.unit, "basis": param.basis,
+                "switch_value": None, "low": lo, "high": hi,
+                "note": ("в заданном диапазоне лидер не меняется: "
+                         + ("альтернатива лучше везде" if lo["alternative_wins"]
+                            else "выбранный план лучше везде"))}
+    good, bad = (param.low, param.high) if not lo["alternative_wins"] else (param.high, param.low)
+    for _ in range(max_iter):
+        if abs(good - bad) <= tol:
+            break
+        mid = (good + bad) / 2
+        good, bad = (mid, bad) if not better(mid)["alternative_wins"] else (good, mid)
+    return {"key": key, "label": param.label, "unit": param.unit, "basis": param.basis,
+            "switch_value": bad, "last_value_where_plan_wins": good,
+            "low": lo, "high": hi, "at_switch": better(bad),
+            "note": ("порог найден делением отрезка пополам при допущении монотонности разницы "
+                     "приведённых расходов по параметру; обе границы диапазона показаны рядом")}
