@@ -462,6 +462,9 @@ input[type=text]{background:rgba(255,255,255,.05);border:1px solid var(--line);b
   var nf0 = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
   var f0 = function (v) { return nf0.format(Math.abs(v) < 0.5 ? 0 : v); };
   var f1 = function (v) { return nf1.format(Math.abs(v) < 0.05 ? 0 : v); };
+  // тарифы и цены за тонну округлять до десятых нельзя: 0,45 млн превратится в 0,5
+  var nf2 = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  var f2 = function (v) { return nf2.format(Math.abs(v) < 0.005 ? 0 : v); };
   var pc = function (v) { return nf1.format(v * 100) + ' %'; };
   var COLOR = { A: 'var(--sA)', B: 'var(--sB)', C: 'var(--sC)', D: 'var(--sD)', E: 'var(--sE)', X: 'var(--sX)' };
   var SNAP = window.SNAPSHOT || null;
@@ -1764,8 +1767,8 @@ input[type=text]{background:rgba(255,255,255,.05);border:1px solid var(--line);b
   function renderContractCards(cards) {
     var fields = [
       ['counterparty', 'Контрагент'], ['subject', 'Предмет'], ['term', 'Срок'],
-      ['capacity_t_per_year', 'Мощность, т/год', f0], ['price_mln_per_t', 'Цена, млн/т', f1],
-      ['reservation_rate_mln_per_t_year', 'Тариф резерва, млн за т/год', f1],
+      ['capacity_t_per_year', 'Мощность, т/год', f0], ['price_mln_per_t', 'Цена, млн/т', f2],
+      ['reservation_rate_mln_per_t_year', 'Тариф резерва, млн за т/год', f2],
       ['take_or_pay_share', 'Take-or-pay', pc], ['lead_time', 'Срок поставки'],
       ['available_from_year', 'Доступен с года'],
       ['payment_terms', 'Оплата'], ['liability', 'Ответственность'],

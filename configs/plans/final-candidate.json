@@ -187,6 +187,7 @@
     "reserve_ramp_months": 9,
     "reserve_safety_factor": 1.15,
     "emergency_base_share_threshold": 0.1,
-    "storage_commissioning_lag_months": 0
+    "storage_commissioning_lag_months": 0,
+    "emergency_batch_t": null
   }
 }
