@@ -1,0 +1,198 @@
+{
+  "plan_id": "final-candidate-isru2037",
+  "scenario_id": "MANDATORY_STRESS",
+  "name": "Финальный кандидат: без Луны плюс две меры плюс Lunar-ISRU 2037",
+  "decisions": {
+    "capacity_reservations": [
+      {
+        "source_id": "A",
+        "year": 2035,
+        "reserved_t_per_year": 120.9
+      },
+      {
+        "source_id": "A",
+        "year": 2036,
+        "reserved_t_per_year": 162.7
+      },
+      {
+        "source_id": "A",
+        "year": 2037,
+        "reserved_t_per_year": 190.0
+      },
+      {
+        "source_id": "A",
+        "year": 2038,
+        "reserved_t_per_year": 190.0
+      },
+      {
+        "source_id": "A",
+        "year": 2039,
+        "reserved_t_per_year": 190.0
+      },
+      {
+        "source_id": "A",
+        "year": 2040,
+        "reserved_t_per_year": 190.0
+      },
+      {
+        "source_id": "B",
+        "year": 2035,
+        "reserved_t_per_year": 11.0
+      },
+      {
+        "source_id": "B",
+        "year": 2036,
+        "reserved_t_per_year": 15.4
+      },
+      {
+        "source_id": "B",
+        "year": 2037,
+        "reserved_t_per_year": 110.0
+      },
+      {
+        "source_id": "B",
+        "year": 2038,
+        "reserved_t_per_year": 0.0
+      },
+      {
+        "source_id": "B",
+        "year": 2039,
+        "reserved_t_per_year": 0.0
+      },
+      {
+        "source_id": "B",
+        "year": 2040,
+        "reserved_t_per_year": 0.0
+      },
+      {
+        "source_id": "C",
+        "year": 2035,
+        "reserved_t_per_year": 0.0
+      },
+      {
+        "source_id": "C",
+        "year": 2036,
+        "reserved_t_per_year": 0.0
+      },
+      {
+        "source_id": "C",
+        "year": 2037,
+        "reserved_t_per_year": 68.9
+      },
+      {
+        "source_id": "C",
+        "year": 2038,
+        "reserved_t_per_year": 68.5
+      },
+      {
+        "source_id": "C",
+        "year": 2039,
+        "reserved_t_per_year": 120.0
+      },
+      {
+        "source_id": "C",
+        "year": 2040,
+        "reserved_t_per_year": 120.0
+      },
+      {
+        "source_id": "D",
+        "year": 2035,
+        "reserved_t_per_year": 0.0
+      },
+      {
+        "source_id": "D",
+        "year": 2036,
+        "reserved_t_per_year": 0.0
+      },
+      {
+        "source_id": "D",
+        "year": 2037,
+        "reserved_t_per_year": 0.0
+      },
+      {
+        "source_id": "D",
+        "year": 2038,
+        "reserved_t_per_year": 120.0
+      },
+      {
+        "source_id": "D",
+        "year": 2039,
+        "reserved_t_per_year": 120.0
+      },
+      {
+        "source_id": "D",
+        "year": 2040,
+        "reserved_t_per_year": 120.0
+      },
+      {
+        "source_id": "E",
+        "year": 2035,
+        "reserved_t_per_year": 13.6
+      },
+      {
+        "source_id": "E",
+        "year": 2036,
+        "reserved_t_per_year": 19.0
+      },
+      {
+        "source_id": "E",
+        "year": 2037,
+        "reserved_t_per_year": 60.0
+      },
+      {
+        "source_id": "E",
+        "year": 2038,
+        "reserved_t_per_year": 38.5
+      },
+      {
+        "source_id": "E",
+        "year": 2039,
+        "reserved_t_per_year": 49.3
+      },
+      {
+        "source_id": "E",
+        "year": 2040,
+        "reserved_t_per_year": 60.1
+      }
+    ],
+    "supply_orders": [],
+    "investments": [
+      {
+        "investment_id": "ZBO",
+        "decision_year": 2036
+      },
+      {
+        "investment_id": "LUNAR_ISRU",
+        "decision_year": 2037
+      },
+      {
+        "investment_id": "EARTH_NEW_OPTION",
+        "decision_year": 2035
+      },
+      {
+        "investment_id": "EARTH_NEW_EXERCISE",
+        "decision_year": 2035
+      }
+    ],
+    "inventory_policy": {
+      "mode": "physical",
+      "opening_stock_t": 13.6,
+      "target_days": 45
+    }
+  },
+  "assumptions": {
+    "discount_rate": 0.08,
+    "discount_base_year": 2035,
+    "timestep": "month",
+    "emergency_lead_steps": 2,
+    "earth_new_prep_months": 18,
+    "isru_commissioning_lag_months": 2,
+    "opening_stock_source": "A",
+    "reserve_ramp_months": 9,
+    "reserve_safety_factor": 1.15,
+    "emergency_base_share_threshold": 0.1,
+    "storage_commissioning_lag_months": 0,
+    "emergency_batch_t": null,
+    "dispatch_mode": "reactive"
+  }
+}

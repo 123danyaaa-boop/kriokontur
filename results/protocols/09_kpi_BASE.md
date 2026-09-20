@@ -1,6 +1,6 @@
 # Протокол: KPI, сценарий BASE
 
-Сформировано 2026-09-20T06:21:39+00:00 командой `PYTHONPATH=src python scripts/build_protocols.py`.
+Сформировано 2026-09-20T06:28:47+00:00 командой `PYTHONPATH=src python scripts/build_protocols.py`.
 
 KPI считаются из того же прогона, что и выгрузка, и попадают в CSV и XLSX.
 
