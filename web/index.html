@@ -253,6 +253,11 @@ input[type=text]{background:rgba(255,255,255,.05);border:1px solid var(--line);b
       <p class="hint" id="planNote"></p>
       <div class="toolbar">
         <button class="btn" id="autoplanBtn">Автоплан</button>
+        <button class="btn" id="optimizeBtn" title="Модель подбирает резервирование и инвестиции, помесячный движок проверяет исполнимость">Оптимизировать</button>
+        <select id="optimizeScope" title="Какие сценарии план обязан выдержать">
+          <option value="control">под контрольные сценарии</option>
+          <option value="all">под все сценарии (робастно)</option>
+        </select>
         <button class="btn" id="resetBtn">Сбросить к пресету</button>
         <label class="chip">имя плана <input type="text" id="planNameInput" placeholder="как назвать сохранение"></label>
         <button class="btn" id="saveBtn">Сохранить план</button>
@@ -627,7 +632,7 @@ input[type=text]{background:rgba(255,255,255,.05);border:1px solid var(--line);b
   /* Элементы, которым нужен пересчёт на бэкенде: в демо они выключены и объясняют почему. */
   function liveOnly() {
     return $$('#invest button, #reserveMode button, #rate, #sensBtn, #csvBtn, #xlsxBtn, ' +
-              '#autoplanBtn, #saveBtn, #openBtn, #resetBtn, #savedSel, #risksBtn, #mcBtn, #mcTrials, ' +
+              '#autoplanBtn, #optimizeBtn, #optimizeScope, #saveBtn, #openBtn, #resetBtn, #savedSel, #risksBtn, #mcBtn, #mcTrials, ' +
               '#cmpBtn, #stratBtn, #importBtn, #planNameInput, #contractsBtn, #stkBtn, #csBtn, ' +
               '#csDemand, #csPrice, #csDelivery, #csCapacity, #csFrom, #csTo, ' +
               '#csPriceSources, #csDeliverySources, #csCapacitySources, ' +
@@ -960,10 +965,32 @@ input[type=text]{background:rgba(255,255,255,.05);border:1px solid var(--line);b
         .catch(function (e) { busy(false, '#planStatus'); showError(e, 'автоплан'); });
     });
 
+    $('#optimizeBtn').addEventListener('click', function () {
+      var scope = $('#optimizeScope').value;
+      var ids = scope === 'all' ? state.scenarios.map(function (s) { return s.scenario_id; }) : ['BASE', 'MANDATORY_STRESS'];
+      busy(true, '#planStatus', 'оптимизирую план и проверяю его движком…');
+      api('/api/optimize', { plan: state.plan, scenario_ids: ids, strategic_stock: false })
+        .then(function (r) {
+          busy(false, '#planStatus');
+          clearError();
+          state.plan = r.plan;
+          state.planKey = '__opt__';
+          state.plans.__opt__ = clone(r.plan);
+          fillPlans();
+          var bad = Object.keys(r.verification).filter(function (k) { return r.verification[k].hard > 0; });
+          say('Оптимизированный план: ' + (r.feasible_in_required ? 'исполним' : 'НЕ исполним') +
+              ' в обязательных сценариях (' + ids.length + '). Проверено движком во всех сценариях, с нарушениями: ' +
+              (bad.length ? bad.join(', ') : 'нет') + '. Приведённые расходы BASE ' +
+              Math.round(r.verification.BASE.pv_mln) + ' млн.');
+          recompute();
+        })
+        .catch(function (e) { busy(false, '#planStatus'); showError(e, 'оптимизация'); });
+    });
+
     $('#resetBtn').addEventListener('click', function () {
       var key = state.planKey;
-      if (key === '__auto__' || !state.plans[key]) {
-        key = Object.keys(state.plans).filter(function (k) { return k !== '__auto__'; })[0];
+      if (key === '__auto__' || key === '__opt__' || !state.plans[key]) {
+        key = Object.keys(state.plans).filter(function (k) { return k !== '__auto__' && k !== '__opt__'; })[0];
       }
       busy(true, '#planStatus', 'возвращаю пресет…');
       api('/api/plans/presets').then(function (presets) {
