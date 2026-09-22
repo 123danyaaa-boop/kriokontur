@@ -292,6 +292,7 @@ def run(case: CaseInput, scenario: Scenario, plan: Plan) -> RunResult:
                    key=lambda s: s.variable_cost_mln_per_t)
     lead_steps = int(plan.assume("emergency_lead_steps"))
     ramp_months = float(plan.assume("reserve_ramp_months"))
+    strategic = {int(y): float(v) for y, v in (plan.inventory_policy.get("target_opening_t") or {}).items()}
     safety = float(plan.assume("reserve_safety_factor"))
     store_lag = float(plan.assume("storage_commissioning_lag_months") or 0.0)
     dispatch_mode = str(plan.assume("dispatch_mode") or "reactive")
@@ -332,6 +333,13 @@ def run(case: CaseInput, scenario: Scenario, plan: Plan) -> RunResult:
         r_next = years[i + 1].reserve_required_t if i + 1 < len(years) else r_now
         ramp = min(1.0, max(0.0, (month - (MONTHS - ramp_months - 1)) / ramp_months))
         target = (r_now + (r_next - r_now) * ramp) * safety
+        # стратегический запас (необязательный параметр плана): оператор заранее набирает топливо
+        # перед известным провалом мощности или подорожанием. Без параметра поведение прежнее.
+        if strategic:
+            t_now = max(r_now * safety, strategic.get(year, 0.0))
+            nxt = case.years[i + 1] if i + 1 < len(case.years) else None
+            t_next = max(r_next * safety, strategic.get(nxt, 0.0)) if nxt is not None else t_now
+            target = t_now + (t_next - t_now) * ramp
 
         ordered = {s.source_id: 0.0 for s in case.source_list}
         net = 1.0 - store.loss_rate_on_throughput

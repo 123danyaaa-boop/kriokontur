@@ -1,0 +1,56 @@
+{
+ "final-candidate": {
+  "label": "Ручной план команды",
+  "base": 8918.712331827574,
+  "stress": 10275.229389724116,
+  "mean": 9477.803559155946,
+  "worst": 11569.684801226389,
+  "bad": 0,
+  "time_s": 0.0,
+  "problems": {}
+ },
+ "optimized-control": {
+  "label": "Оптимизатор: два контрольных сценария",
+  "base": 8835.11760477377,
+  "stress": 9877.085001280306,
+  "mean": 9303.929996249444,
+  "worst": 11112.304789014217,
+  "bad": 4,
+  "time_s": 0.1,
+  "problems": {
+   "HIGH_DEMAND": [
+    "RESERVE_45D_NOT_MET"
+   ],
+   "TEAM_COMBINED_STRESS_HIGH": [
+    "RESERVE_45D_NOT_MET"
+   ],
+   "TEAM_RISK_CORE_OUTAGE": [
+    "RESERVE_45D_NOT_MET"
+   ],
+   "TEAM_RISK_EARTH_NEW_DELAY": [
+    "RESERVE_45D_NOT_MET",
+    "SOURCE_NOT_AVAILABLE"
+   ]
+  }
+ },
+ "optimized-robust-capacity": {
+  "label": "Оптимизатор: все сценарии, страховка мощностью",
+  "base": 8858.307563971342,
+  "stress": 10227.281467023451,
+  "mean": 9441.20080778357,
+  "worst": 11610.076349075567,
+  "bad": 0,
+  "time_s": 0.41,
+  "problems": {}
+ },
+ "optimized-robust": {
+  "label": "Оптимизатор: все сценарии, страховка запасом",
+  "base": 9143.246206422125,
+  "stress": 10432.752525246857,
+  "mean": 9672.388396167249,
+  "worst": 11801.065259397801,
+  "bad": 0,
+  "time_s": 0.48,
+  "problems": {}
+ }
+}

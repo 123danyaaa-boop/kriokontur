@@ -1,0 +1,119 @@
+{
+ "horizon": 2048,
+ "from_year": 2038,
+ "rows": [
+  {
+   "factor": 1.0,
+   "method": "increment",
+   "payback": 2041,
+   "gain_mln": 2238.1
+  },
+  {
+   "factor": 1.0,
+   "method": "saturating",
+   "payback": 2041,
+   "gain_mln": 2211.8
+  },
+  {
+   "factor": 1.0,
+   "method": "plateau",
+   "payback": 2041,
+   "gain_mln": 1968.5
+  },
+  {
+   "factor": 0.8,
+   "method": "increment",
+   "payback": 2043,
+   "gain_mln": 1101.1
+  },
+  {
+   "factor": 0.8,
+   "method": "saturating",
+   "payback": 2043,
+   "gain_mln": 1079.4
+  },
+  {
+   "factor": 0.8,
+   "method": "plateau",
+   "payback": 2042,
+   "gain_mln": 901.7
+  },
+  {
+   "factor": 0.7,
+   "method": "increment",
+   "payback": 2044,
+   "gain_mln": 532.5
+  },
+  {
+   "factor": 0.7,
+   "method": "saturating",
+   "payback": 2044,
+   "gain_mln": 513.3
+  },
+  {
+   "factor": 0.7,
+   "method": "plateau",
+   "payback": 2044,
+   "gain_mln": 368.3
+  },
+  {
+   "factor": 0.6,
+   "method": "increment",
+   "payback": null,
+   "gain_mln": -36.0
+  },
+  {
+   "factor": 0.6,
+   "method": "saturating",
+   "payback": null,
+   "gain_mln": -52.9
+  },
+  {
+   "factor": 0.6,
+   "method": "plateau",
+   "payback": null,
+   "gain_mln": -165.2
+  },
+  {
+   "factor": 0.5,
+   "method": "increment",
+   "payback": null,
+   "gain_mln": -604.6
+  },
+  {
+   "factor": 0.5,
+   "method": "saturating",
+   "payback": null,
+   "gain_mln": -619.1
+  },
+  {
+   "factor": 0.5,
+   "method": "plateau",
+   "payback": null,
+   "gain_mln": -698.6
+  },
+  {
+   "factor": 0.3,
+   "method": "increment",
+   "payback": null,
+   "gain_mln": -1741.6
+  },
+  {
+   "factor": 0.3,
+   "method": "saturating",
+   "payback": null,
+   "gain_mln": -1751.4
+  },
+  {
+   "factor": 0.3,
+   "method": "plateau",
+   "payback": null,
+   "gain_mln": -1765.4
+  }
+ ],
+ "thresholds": {
+  "increment": 0.6089843749999999,
+  "saturating": 0.61171875,
+  "plateau": 0.6335937500000001
+ }
+}

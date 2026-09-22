@@ -681,3 +681,40 @@ if _WEB.exists():
         return FileResponse(_WEB / "index.html")
 
     app.mount("/web", StaticFiles(directory=_WEB), name="web")
+
+
+
+# --------------------------------------------------------------------------- #
+# оптимизатор: план предлагает модель, исполнимость решает движок
+# --------------------------------------------------------------------------- #
+class OptimizeBody(BaseModel):
+    plan: Optional[dict] = None
+    scenario_ids: Optional[List[str]] = None       # по умолчанию два контрольных
+    strategic_stock: bool = False                  # False: страховка мощностью (дешевле по расчётам)
+    weights: Optional[Dict[str, float]] = None
+    time_limit_s: int = 60
+
+
+@app.post("/api/optimize")
+def post_optimize(body: OptimizeBody):
+    from .optimizer import OptimizerSettings, optimize_and_verify
+    base = Plan.from_envelope(body.plan) if body.plan else Plan.load(paths.PLANS / "final-candidate.json")
+    ids = body.scenario_ids or ["BASE", "MANDATORY_STRESS"]
+    unknown = [s for s in ids if s not in SCENARIOS]
+    if unknown:
+        raise HTTPException(status_code=422, detail={"message": f"неизвестные сценарии: {', '.join(unknown)}"})
+    settings = OptimizerSettings(scenario_ids=ids, strategic_stock=body.strategic_stock,
+                                 weights=body.weights, time_limit_s=body.time_limit_s)
+    res = optimize_and_verify(CASE, SCENARIOS, base, settings, report_ids=list(SCENARIOS), max_iter=8)
+    if res.status != "Optimal":
+        raise HTTPException(status_code=422, detail={"message": f"модель не нашла план: {res.status}. "
+                                                                "Ослабьте набор сценариев или проверьте лимиты."})
+    return {
+        "status": res.status, "iterations": res.iterations,
+        "plan": res.plan.to_envelope("BASE"),
+        "decisions": res.decisions,
+        "verification": res.verification,
+        "required_scenarios": ids,
+        "feasible_in_required": all(res.verification[s]["hard"] == 0 for s in ids),
+        "note": "План предложен моделью и проверен помесячным движком во всех сценариях.",
+    }
