@@ -3,7 +3,12 @@
 # Переходим в папку самого скрипта, чтобы запуск не зависел от того, откуда его кликнули.
 cd "$(dirname "$0")" || exit 1
 
-if command -v python3 >/dev/null 2>&1; then
+# Если в папке есть виртуальное окружение проекта, запускаем его интерпретатором:
+# в нём стоят закреплённые версии библиотек, системный Python не трогаем.
+if [ -x ".venv/bin/python" ]; then
+    PY=.venv/bin/python
+    echo "Запуск через виртуальное окружение .venv"
+elif command -v python3 >/dev/null 2>&1; then
     PY=python3
 elif command -v python >/dev/null 2>&1; then
     PY=python

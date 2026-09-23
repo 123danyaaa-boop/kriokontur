@@ -108,7 +108,8 @@ def apply(check_only: bool) -> int:
             if check_only:
                 problems.append(f"{path.relative_to(ROOT)}: числа устарели")
             else:
-                path.write_text(updated, encoding="utf-8")
+                # newline="\n": иначе на Windows README уходит в CRLF и git status не чистый
+                path.write_text(updated, encoding="utf-8", newline="\n")
                 print("обновлён", path.relative_to(ROOT))
     if problems:
         print("\n".join(problems))

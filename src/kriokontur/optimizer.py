@@ -102,7 +102,7 @@ def build_model(case: CaseInput, scenarios: Dict[str, Scenario], base_plan: Plan
         allowed = (inv != "LUNAR_ISRU" or settings.allow_isru) and \
                   (not inv.startswith("EARTH_NEW") or settings.allow_earth_new)
         for y in ys:
-            build[inv, y] = pulp.LpVariable(f"b_{inv}_{y}", cat="Binary") if allowed else 0
+            build[inv, y] = m.add_variable(f"b_{inv}_{y}", cat="Binary") if allowed else 0
         m += pulp.lpSum(build[inv, y] for y in ys) <= 1, f"once_{inv}"
     # реализация опциона не раньше покупки права
     for y in years:
@@ -125,10 +125,10 @@ def build_model(case: CaseInput, scenarios: Dict[str, Scenario], base_plan: Plan
     ResC = {}   # Earth-New раскладывается по году реализации опциона, чтобы доля года оставалась линейной
     for s in S:
         for i, y in enumerate(years):
-            Res[s, y] = pulp.LpVariable(f"res_{s}_{y}", lowBound=0, upBound=src[s].capacity_t_per_year)
+            Res[s, y] = m.add_variable(f"res_{s}_{y}", lowBound=0, upBound=src[s].capacity_t_per_year)
     for t in INVEST_YEARS["EARTH_NEW_EXERCISE"]:
         for y in years:
-            ResC[t, y] = pulp.LpVariable(f"resC_{t}_{y}", lowBound=0, upBound=src["C"].capacity_t_per_year)
+            ResC[t, y] = m.add_variable(f"resC_{t}_{y}", lowBound=0, upBound=src["C"].capacity_t_per_year)
             b = build["EARTH_NEW_EXERCISE", t]
             m += ResC[t, y] <= src["C"].capacity_t_per_year * (b if not isinstance(b, int) else b), f"resC_link_{t}_{y}"
     for y in years:
@@ -138,7 +138,7 @@ def build_model(case: CaseInput, scenarios: Dict[str, Scenario], base_plan: Plan
     # не разрешено «закупать впрок» до 2035 года. Запас ограничен требованием резерва с тем же
     # коэффициентом, что и в политике запаса команды.
     R0 = max(rules.reserve_days_to_tonnes(scenarios[k].demand_total(case, y0)) for k in settings.scenario_ids)
-    I0 = pulp.LpVariable("opening_stock", lowBound=R0, upBound=R0 * max(1.0, float(base_plan.assume("reserve_safety_factor") or 1.0)))
+    I0 = m.add_variable("opening_stock", lowBound=R0, upBound=R0 * max(1.0, float(base_plan.assume("reserve_safety_factor") or 1.0)))
 
     # ---- второй этап: сценарии -------------------------------------------------------
     pv_k = {}
@@ -149,7 +149,7 @@ def build_model(case: CaseInput, scenarios: Dict[str, Scenario], base_plan: Plan
         first = {s: (None if src[s].available_from_year is None else
                      int(max(0, (src[s].available_from_year - y0) * MONTHS) + delay[s])) for s in ("A", "B", "E")}
         first_d = int(max((d_from - y0) * MONTHS + lag_d, 0) + delay["D"])
-        I = {y: pulp.LpVariable(f"I_{k}_{y}", lowBound=0) for y in years + [years[-1] + 1]}
+        I = {y: m.add_variable(f"I_{k}_{y}", lowBound=0) for y in years + [years[-1] + 1]}
         m += I[years[0]] == I0, f"open_{k}"
         cost_terms = []
         for i, y in enumerate(years):
@@ -171,8 +171,8 @@ def build_model(case: CaseInput, scenarios: Dict[str, Scenario], base_plan: Plan
             reserved_period = {s: Res[s, y] * fr[s] for s in ("A", "B", "E", "D")}
             reserved_period["C"] = pulp.lpSum(reservedC_terms)
 
-            Q = {s: pulp.LpVariable(f"Q_{k}_{s}_{y}", lowBound=0) for s in S}
-            pay = {s: pulp.LpVariable(f"P_{k}_{s}_{y}", lowBound=0) for s in S}
+            Q = {s: m.add_variable(f"Q_{k}_{s}_{y}", lowBound=0) for s in S}
+            pay = {s: m.add_variable(f"P_{k}_{s}_{y}", lowBound=0) for s in S}
             for s in S:
                 m += Q[s] <= avail[s], f"cap_{k}_{s}_{y}"
                 m += pay[s] >= Q[s], f"pay_q_{k}_{s}_{y}"
@@ -182,7 +182,7 @@ def build_model(case: CaseInput, scenarios: Dict[str, Scenario], base_plan: Plan
             # Точное правило кейса: аварийный канал считается базовым, если его доля в году выше порога,
             # и базовым он не может быть больше двух лет подряд. u = 1 в годы «базового» использования.
             e_share = float(base_plan.assume("emergency_base_share_threshold") or 0.10)
-            u = pulp.LpVariable(f"u_emerg_{k}_{y}", cat="Binary")
+            u = m.add_variable(f"u_emerg_{k}_{y}", cat="Binary")
             m += Q["E"] <= e_share * dem + src["E"].capacity_t_per_year * u, f"emergency_share_{k}_{y}"
             U.setdefault(k, {})[y] = u
             # запас месячной мощности: диспетчер набирает резерв к началу следующего года помесячно,
@@ -207,7 +207,7 @@ def build_model(case: CaseInput, scenarios: Dict[str, Scenario], base_plan: Plan
                     m += ResC[t, y] == 0, f"no_resC_before_avail_{k}_{t}_{y}"
             inflow = pulp.lpSum(Q[s] * sc.delivery_factor(src[s].name, s, y) for s in S)
             # потери зависят от режима хранилища: линеаризация произведения бинарной и непрерывной
-            Wz = pulp.LpVariable(f"Wz_{k}_{y}", lowBound=0)
+            Wz = m.add_variable(f"Wz_{k}_{y}", lowBound=0)
             big = sum(src[s].capacity_t_per_year for s in S)
             m += Wz <= big * zbo_active[y], f"wz1_{k}_{y}"
             m += Wz <= inflow, f"wz2_{k}_{y}"
@@ -284,11 +284,54 @@ def _to_plan(case: CaseInput, base_plan: Plan, V: Dict, settings: OptimizerSetti
     return plan, decisions
 
 
+def bundled_cbc_path() -> Optional[str]:
+    """Путь к CBC 2.10.3, встроенному в PuLP 3.x, или None, если его в пакете нет.
+
+    Этим решателем получены все опубликованные числа. Права на исполнение в Linux и macOS
+    PuLP выставляет сам при импорте. В PuLP 4.0 встроенный бинарник уберут.
+    """
+    from pulp.apis import coin_api
+    bundled = getattr(coin_api, "pulp_cbc_path", None)
+    if not bundled:
+        return None
+    return coin_api.COIN_CMD.executableExtension(bundled)
+
+
+def _solver(time_limit_s: Optional[float]) -> pulp.LpSolver:
+    """CBC через COIN_CMD, как рекомендует PuLP 3.3 перед переходом на 4.0.
+
+    PULP_CBC_CMD устарел, поэтому тот же встроенный бинарник вызывается через COIN_CMD
+    с явным путём. Где искать CBC, по порядку:
+        1. CBC 2.10.3, встроенный в PuLP 3.3.2: им получены все опубликованные числа,
+           и он воспроизводим на любой машине, потому что PuLP закреплён;
+        2. пакет cbcbox, если он установлен (его ставит pip install pulp[cbc]);
+        3. cbc в PATH.
+    cbcbox и PATH только запасные: cbcbox это +140–180 МБ и сборка из ветки разработки,
+    которая сама выбирает вариант по процессору. Вернуться к вопросу при переходе на PuLP 4.
+    """
+    candidates: List[Optional[str]] = []
+    bundled = bundled_cbc_path()
+    if bundled:
+        candidates.append(bundled)
+    try:
+        import cbcbox
+        candidates.append(cbcbox.cbc_bin_path())
+    except ImportError:
+        pass
+    candidates.append(None)  # COIN_CMD сам ищет cbc в PATH
+    for path in candidates:
+        solver = pulp.COIN_CMD(msg=False, timeLimit=time_limit_s, path=path)
+        if solver.available():
+            return solver
+    raise RuntimeError("не найден решатель CBC: поставьте зависимости командой "
+                       "python -m pip install -r requirements.txt")
+
+
 def optimize(case: CaseInput, scenarios: Dict[str, Scenario], base_plan: Plan,
              settings: Optional[OptimizerSettings] = None) -> OptimizerResult:
     settings = settings or OptimizerSettings()
     model, V = build_model(case, scenarios, base_plan, settings)
-    model.solve(pulp.PULP_CBC_CMD(msg=False, timeLimit=settings.time_limit_s))
+    model.solve(_solver(settings.time_limit_s))
     status = pulp.LpStatus[model.status]
     if status not in ("Optimal", "Not Solved") or model.objective.value() is None:
         return OptimizerResult(status=status, objective_pv=float("nan"), plan=base_plan,

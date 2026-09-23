@@ -103,7 +103,9 @@ class Plan:
     def save(self, path: Path | str, scenario_id: str = "BASE") -> None:
         target = resolve_for_write(path, "план")
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(self.to_envelope(scenario_id), ensure_ascii=False, indent=2), encoding="utf-8")
+        # newline="\n": план в configs/plans должен быть побайтно одинаковым на Windows и Linux
+        target.write_text(json.dumps(self.to_envelope(scenario_id), ensure_ascii=False, indent=2),
+                          encoding="utf-8", newline="\n")
 
     @staticmethod
     def load(path: Path | str) -> "Plan":

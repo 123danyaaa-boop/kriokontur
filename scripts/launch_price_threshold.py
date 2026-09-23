@@ -78,8 +78,10 @@ def main() -> None:
     lines += ["", "Чтение: если цена доставки топлива с Земли после 2038 года упадёт ниже порога относительно",
               "уровня кейса, лунное производство не окупится до конца горизонта. Решение о Луне поэтому",
               "принимается как инвестиционные ворота с условием на траекторию цен выведения."]
-    (ROOT / "results" / "protocols" / "12_launch_price.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    (ROOT / "results" / "protocols" / "12_launch_price.json").write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
+    # newline="\n": одинаковые байты на Windows и Linux, иначе git видит изменения в каждом прогоне
+    (ROOT / "results" / "protocols" / "12_launch_price.md").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    (ROOT / "results" / "protocols" / "12_launch_price.json").write_text(json.dumps(out, ensure_ascii=False, indent=1),
+                                                                        encoding="utf-8", newline="\n")
 
 
 if __name__ == "__main__":
